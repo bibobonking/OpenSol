@@ -76,7 +76,7 @@ test('a rejected source names the file, the line and the text that matched', () 
         ...source,
         files: { ...source.files, 'plugin.js': 'maxcode.log("hi")\n// export the palette\nconst x = 1' },
       }),
-    /plugin\.js:2.*"export"/,
+    /found "export" at plugin\.js:2/,
   )
   assert.throws(() => buildPluginArchive({ ...source, files: { ...source.files, 'plugin.js': 'fetch("https://evil.test")' } }), /"fetch\("/)
   assert.throws(
