@@ -19,6 +19,7 @@ import {
   Info,
   Link2,
   LockKeyhole,
+  Package,
   Palette,
   Plus,
   RefreshCw,
@@ -54,6 +55,7 @@ import { executeDaemonTool, resetScope } from '../lib/daemon'
 import { effortOptions, reasoningSummary } from '../lib/reasoning'
 import { cn, formatBytes, readFileAsText } from '../lib/utils'
 import { LogoMark } from './Logo'
+import { PluginManager } from './PluginManager'
 import { Modal, Segmented, Spinner, Switch } from './ui'
 
 const TABS = [
@@ -61,6 +63,7 @@ const TABS = [
   { id: 'tools', label: 'Tools', icon: Wrench, description: 'What MaxCode can do on this machine, and when it must ask.' },
   { id: 'search', label: 'Search', icon: Globe2, description: 'Give the agent current web results with your own key.' },
   { id: 'skills', label: 'Skills', icon: Sparkles, description: 'Instructions added to every request when enabled.' },
+  { id: 'plugins', label: 'Plugins', icon: Package, description: 'Install local .pluginmax packages, review what they ask for, and run them once you trust the code.' },
   { id: 'deploy', label: 'Deploy', icon: Rocket, description: 'Hosting credentials and command-line tools.' },
   { id: 'appearance', label: 'Appearance', icon: Palette, description: 'Theme and interface preferences.' },
   { id: 'about', label: 'About', icon: Info, description: 'Local storage, history and reset controls.' },
@@ -1445,6 +1448,17 @@ function DeployTab() {
   )
 }
 
+function PluginsTab() {
+  return (
+    <SettingsSection
+      title="Local plugins"
+      description="MaxCode only installs .pluginmax files you choose from this machine. A plugin stays sandboxed and disabled until you review its permissions and mark it Safe."
+    >
+      <PluginManager />
+    </SettingsSection>
+  )
+}
+
 function AppearanceTab() {
   const settings = useSettings()
   const update = useSettings((state) => state.update)
@@ -1818,6 +1832,7 @@ export function SettingsModal() {
             {tab === 'tools' && <ToolsTab />}
             {tab === 'search' && <SearchTab />}
             {tab === 'skills' && <SkillsTab />}
+            {tab === 'plugins' && <PluginsTab />}
             {tab === 'deploy' && <DeployTab />}
             {tab === 'appearance' && <AppearanceTab />}
             {tab === 'about' && <AboutTab />}

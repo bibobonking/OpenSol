@@ -44,7 +44,7 @@ interface UiState {
   workspaceOpen: boolean
   setWorkspaceOpen: (open: boolean) => void
   settingsOpen: boolean
-  settingsTab: 'models' | 'tools' | 'search' | 'skills' | 'deploy' | 'appearance' | 'about'
+  settingsTab: 'models' | 'tools' | 'search' | 'skills' | 'plugins' | 'deploy' | 'appearance' | 'about'
   openSettings: (tab?: UiState['settingsTab']) => void
   closeSettings: () => void
   deployOpen: boolean
