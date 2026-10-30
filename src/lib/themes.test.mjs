@@ -54,8 +54,10 @@ test('legacy, named, system and invalid themes resolve', () => {
   assert.equal(normalizeTheme('claude-code'), 'claude-code')
   assert.equal(normalizeTheme('flame'), 'flame')
   assert.equal(normalizeTheme(undefined), 'system')
-  assert.equal(normalizeTheme('solarized'), 'system')
   assert.equal(normalizeTheme(7), 'system')
+  assert.equal(normalizeTheme('Not A Theme'), 'system')
+  // Plugin themes are `plugin-<id>:<theme>` slugs the app has not seen at build time.
+  assert.equal(normalizeTheme('plugin-demo:sunrise'), 'plugin-demo:sunrise')
 })
 
 test('system follows the OS preference while named themes do not', () => {

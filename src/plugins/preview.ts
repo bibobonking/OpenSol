@@ -15,9 +15,6 @@ export function previewDocument(manifest: { id: string; name: string }, source: 
       network: () => { throw new Error('The sandboxed preview has no network access.') },
       workspace: { list: () => [], read: () => '', write: () => {}, edit: () => false },
     }
-    window.addEventListener('message', (event) => {
-      if (event.data && event.data.type === 'preview-run') return
-    })
     try { ;(function (maxcode) { ${source} })(api) } catch (error) {
       send({ type: 'error', message: String(error && error.message ? error.message : error).slice(0, 500) })
     }

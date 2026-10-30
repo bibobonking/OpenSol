@@ -56,6 +56,7 @@ import { effortOptions, reasoningSummary } from '../lib/reasoning'
 import { cn, formatBytes, readFileAsText } from '../lib/utils'
 import { LogoMark } from './Logo'
 import { PluginManager } from './PluginManager'
+import { pluginRuntime } from '../plugins'
 import { Modal, Segmented, Spinner, Switch } from './ui'
 
 const TABS = [
@@ -1474,6 +1475,13 @@ function AppearanceTab() {
       className: 'bg-gradient-to-br from-[#fcfcfc] to-[#09090b]',
       line: 'bg-[#8a8a92]',
     },
+    // Themes contributed by Safe plugins.
+    ...pluginRuntime().themes().map((theme) => ({
+      id: theme.id,
+      label: theme.label,
+      className: 'bg-gradient-to-br from-accent-soft to-panel',
+      line: 'bg-line',
+    })),
   ]
 
   return (

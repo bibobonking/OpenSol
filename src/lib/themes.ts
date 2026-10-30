@@ -1,11 +1,14 @@
-export type ThemeId = 'light' | 'dark' | 'system' | 'night-owl' | 'claude-code' | 'flame'
+export type BuiltinThemeId = 'light' | 'dark' | 'system' | 'night-owl' | 'claude-code' | 'flame'
 
-export type ResolvedThemeId = Exclude<ThemeId, 'system'>
+/** A built-in theme id, or a Safe plugin's `plugin-<plugin>:<theme>` id. */
+export type ThemeId = BuiltinThemeId | (string & {})
+
+export type ResolvedThemeId = Exclude<BuiltinThemeId, 'system'> | (string & {})
 
 export interface ThemeMeta {
-  id: ResolvedThemeId
+  id: string
   label: string
-  /** Whether `dark:` Tailwind variants apply for this palette. */
+  /** Whether the `dark` class (and `dark:` Tailwind variants) applies. */
   dark: boolean
 }
 
@@ -17,23 +20,33 @@ export const THEMES: ThemeMeta[] = [
   { id: 'flame', label: 'Flame', dark: true },
 ]
 
-const RESOLVED_IDS = new Set<string>([...THEMES.map((theme) => theme.id)])
+const SLUG = /^[a-z0-9][a-z0-9:_-]{0,79}$/
+const registry = new Map<string, ThemeMeta>(THEMES.map((theme) => [theme.id, theme]))
 
-export function isResolvedTheme(value: unknown): value is ResolvedThemeId {
-  return typeof value === 'string' && RESOLVED_IDS.has(value)
+/** Plugin-contributed themes register here so the app knows how to apply them. */
+export function registerTheme(meta: ThemeMeta): void {
+  registry.set(meta.id, meta)
 }
 
-export function resolveTheme(theme: ThemeId, prefersDark: boolean): ResolvedThemeId {
+export function unregisterTheme(id: string): void {
+  if (THEMES.some((theme) => theme.id === id)) return
+  registry.delete(id)
+}
+
+export function isThemeId(value: unknown): value is string {
+  return typeof value === 'string' && SLUG.test(value)
+}
+
+export function resolveTheme(theme: ThemeId, prefersDark: boolean): string {
   if (theme === 'system') return prefersDark ? 'dark' : 'light'
-  return isResolvedTheme(theme) ? theme : 'light'
+  return isThemeId(theme) ? theme : 'light'
 }
 
 export function themeIsDark(theme: ThemeId, prefersDark: boolean): boolean {
-  const resolved = resolveTheme(theme, prefersDark)
-  return THEMES.find((entry) => entry.id === resolved)?.dark ?? false
+  return registry.get(resolveTheme(theme, prefersDark))?.dark ?? false
 }
 
 export function normalizeTheme(value: unknown): ThemeId {
   if (value === 'system') return 'system'
-  return isResolvedTheme(value) ? value : 'system'
+  return isThemeId(value) ? value : 'system'
 }

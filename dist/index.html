@@ -18,13 +18,21 @@
     />
     <script>
       try {
-        const theme = localStorage.getItem('maxcode.theme')
-        const dark = theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-        if (dark) document.documentElement.classList.add('dark')
+        const NAMED = ['light', 'dark', 'night-owl', 'claude-code', 'flame']
+        const DARK = ['dark', 'night-owl', 'claude-code', 'flame']
+        const stored = localStorage.getItem('maxcode.theme')
+        const theme = NAMED.includes(stored)
+          ? stored
+          : window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light'
+        const root = document.documentElement
+        root.dataset.theme = theme
+        if (DARK.includes(theme)) root.classList.add('dark')
       } catch {}
     </script>
-    <script type="module" crossorigin src="./assets/index-CUGlGWFL.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DeQYbQf3.css">
+    <script type="module" crossorigin src="./assets/index-CavYDUMN.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CQJwt7rh.css">
   </head>
   <body>
     <div id="root"></div>

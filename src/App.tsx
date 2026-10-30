@@ -13,6 +13,8 @@ import { useModelSync } from './store/models'
 import { useUi } from './store/ui'
 import { useBoot } from './lib/boot'
 import { resolveTheme, themeIsDark } from './lib/themes'
+import { listInstalledPlugins } from './lib/daemon'
+import { syncPlugins } from './plugins'
 
 function BootScreen({
   phase,
@@ -82,6 +84,14 @@ export default function App() {
   useEffect(() => {
     void boot()
   }, [boot])
+
+  // Safe + enabled plugins are loaded once the app knows the daemon answered.
+  useEffect(() => {
+    if (phase !== 'ready') return
+    void listInstalledPlugins()
+      .then((result) => syncPlugins(result.plugins))
+      .catch(() => undefined)
+  }, [phase])
 
   useEffect(() => {
     const root = document.documentElement

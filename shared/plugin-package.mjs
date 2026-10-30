@@ -87,8 +87,9 @@ export function validatePluginManifest(value) {
   if (!Array.isArray(capabilities) || capabilities.some((item) => !CAPABILITIES.has(item))) {
     packageError('invalid capability')
   }
-  if (!Array.isArray(domains)) packageError('domains must be an array')
-  const normalizedDomains = domains.map(validateDomain)
+  // Domains are optional: a plugin that reaches no network simply omits the field.
+  if (domains !== undefined && !Array.isArray(domains)) packageError('domains must be an array')
+  const normalizedDomains = (domains ?? []).map(validateDomain)
   if (new Set(normalizedDomains).size !== normalizedDomains.length) packageError('duplicate domain')
   return {
     id,

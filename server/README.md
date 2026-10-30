@@ -26,11 +26,13 @@ On first launch, choose a real project folder, then add a provider key in **Sett
 ## What is in the app
 
 - **Build and Plan modes.** Build can edit files and run commands; Plan is read-only investigation.
-- **Live models and reasoning.** Model lists come from each provider; the models.dev catalog is only a fallback. DeepThink, effort levels and token budgets appear only when the selected model advertises them.
-- **Real tools.** Read/write/edit files, grep, list files, shell, git, web search, URL reading and a read-only SubAgent, all grouped per assistant round under “Used N tools”.
+- **Live models and reasoning.** Model lists come from each provider; the models.dev catalog is only a fallback. Thinking is the provider's job: an effort control appears only when the selected model advertises effort levels or a token budget, and it is sent automatically.
+- **Themes.** Light, Dark, Night Owl, Claude Code and Flame, plus System, which follows the OS preference. Syntax highlighting follows the theme.
+- **Real tools.** Read/write/edit files, grep, list files, shell, git, web search, URL reading and a read-only SubAgent. Each user turn renders as one answer, with consecutive tool rounds collapsed into a single “Used N tools” group.
+- **Turn queue.** A prompt sent while a turn is streaming waits its turn and runs next, instead of splitting into a second reply.
+- **Local plugins.** Install a `.pluginmax` archive from disk, review its workspace capabilities and declared HTTPS domains one by one, preview it in a sandbox, then mark it Safe to run its JavaScript. The same panel builds a package from a folder you pick — one `.js` entry, an optional stylesheet, a `manifest.json` if the folder has one — and a plugin that needs no network declares no domains. Packages and grants live under `~/.maxcode/plugins`, outside the selected workspace.
 - **Workspace panel.** Folder tree, file editor, git status and quick file actions.
 - **Deploy.** Cloudflare Pages, Netlify and Vercel, for the open workspace or another existing folder. Tokens stay in the daemon and are passed to CLIs through environment variables.
-- **Local plugins.** Install a `.pluginmax` archive from disk, review workspace capabilities and declared HTTPS domains separately, preview it in a sandbox, and explicitly trust it before enabling same-realm JavaScript. Plugin packages and grants live under `~/.maxcode/plugins`, outside the selected workspace.
 - **Local history.** Conversations, settings, workspaces and encrypted keys survive restarts.
 
 Slash commands include `/search`, `/plan`, `/build`, `/new`, `/workspace`, `/deploy`, `/settings` and `/clear`.
@@ -56,7 +58,6 @@ OpenCode free-tier models only work inside OpenCode itself, so they are hidden h
 - `secrets.enc` and `master.key` are created with mode `600`.
 - All API routes require the local session cookie and a CSRF header; Host and Origin are checked.
 - The daemon rejects code execution outside the selected workspace except for an explicit, existing deploy folder.
-- Safe plugins execute JavaScript in the app realm and must be treated as trusted code. The plugin API exposes only workspace-scoped capabilities and mediated HTTPS requests; it does not expose a shell or file download API. The domain allowlist governs the supported network API, not malicious same-realm code that abuses other app capabilities.
 - No telemetry or DevSoft-hosted proxy. Provider requests go directly from the daemon to the provider you configured.
 
 ## Stack

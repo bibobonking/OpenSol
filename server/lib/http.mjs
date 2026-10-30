@@ -42,7 +42,8 @@ export function securityHeaders(res) {
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      // `blob:` lets a user-approved Safe plugin load as a module without unsafe-eval.
+      "script-src 'self' 'unsafe-inline' blob:",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob:",

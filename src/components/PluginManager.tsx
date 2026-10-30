@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { FolderOpen, Package, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react'
+import { Eye, FolderOpen, Package, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react'
 import type { InstalledPlugin } from '../lib/daemon'
 import {
+  getInstalledPluginArchive,
   installPluginArchive,
   listInstalledPlugins,
   removeInstalledPlugin,
@@ -9,12 +10,81 @@ import {
   setPluginActivation,
   setPluginTrust,
 } from '../lib/daemon'
+import { attachPreviewBridge, previewDocument } from '../plugins/preview'
 import type { PluginCapability } from '../../shared/plugin-package.mjs'
 import { readPluginArchive } from '../../shared/plugin-package.mjs'
 import { useUi } from '../store/ui'
 import { cn } from '../lib/utils'
 import { Switch } from './ui'
 import { PluginBuilder } from './PluginBuilder'
+
+const PREVIEW_LOGS = 6
+
+function PluginPreview({ plugin }: { plugin: InstalledPlugin }) {
+  const notify = useUi((state) => state.notify)
+  const [html, setHtml] = useState<string | null>(null)
+  const [log, setLog] = useState<string[]>([])
+  const frameRef = useRef<HTMLIFrameElement>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!frameRef.current || !html) return
+    return attachPreviewBridge(frameRef.current, (message) => {
+      const entry = message as { type: string; message?: string; label?: string }
+      const text =
+        entry.type === 'ready'
+          ? 'Sandbox ready — no app access, no network.'
+          : `${entry.type}: ${entry.message ?? entry.label ?? ''}`
+      setLog((current) => [...current.slice(-(PREVIEW_LOGS - 1)), text])
+    })
+  }, [html])
+
+  const start = async () => {
+    setLoading(true)
+    try {
+      const archive = await getInstalledPluginArchive(plugin.id)
+      const { files, manifest } = readPluginArchive(archive)
+      setLog([])
+      setHtml(previewDocument(manifest, files[manifest.entry] ?? '', files[manifest.stylesheet] ?? ''))
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'This plugin could not be previewed.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        disabled={loading}
+        onClick={() => (html ? setHtml(null) : void start())}
+        className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[10.5px] font-medium text-muted hover:text-ink disabled:opacity-40"
+      >
+        <Eye size={11} />
+        {html ? 'Stop preview' : 'Preview in sandbox'}
+      </button>
+      {html && (
+        <div className="w-full overflow-hidden rounded-lg border border-line">
+          <iframe
+            ref={frameRef}
+            title={`${plugin.manifest.name} preview`}
+            sandbox="allow-scripts"
+            srcDoc={html}
+            className="h-52 w-full bg-panel"
+          />
+          <div className="max-h-24 overflow-y-auto border-t border-line bg-raised/40 px-2.5 py-1.5 font-mono text-[9.5px] leading-relaxed text-faint">
+            {log.map((entry, index) => (
+              <p key={index} className="truncate">
+                {entry}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
 
 const CAPABILITY_LABELS: Record<PluginCapability, string> = {
   'workspace.list': 'List files in the open workspace',
@@ -225,6 +295,7 @@ export function PluginManager() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <PluginPreview plugin={plugin} />
                       <button
                         type="button"
                         onClick={() => void trust(plugin)}

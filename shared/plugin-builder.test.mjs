@@ -25,6 +25,16 @@ test('a built package reopens with its sources and assets intact', () => {
   assert.equal(reopened.files['assets/icon.txt'], 'icon')
 })
 
+test('a manifest may omit domains entirely — a plugin with no network declares none', () => {
+  const { domains, ...withoutDomains } = manifest
+  assert.deepEqual(validatePluginManifest(withoutDomains).domains, [])
+  assert.deepEqual(readPluginArchive(buildPluginArchive({
+    manifest: withoutDomains,
+    files: { 'main.js': 'maxcode.log("hi")', 'main.css': '' },
+  })).manifest.domains, [])
+  assert.throws(() => validatePluginManifest({ ...manifest, domains: 'api.example.com' }), /domains must be an array/)
+})
+
 test('the builder rejects an invalid manifest before packaging', () => {
   assert.throws(() => validatePluginManifest({ ...manifest, id: 'Bad Id' }), /Invalid \.pluginmax package/)
   assert.throws(() => validatePluginManifest({ ...manifest, entry: 'main.ts' }), /entry must be JavaScript/)
