@@ -67,6 +67,24 @@ test('plugin archive rejects unmanaged network APIs and external CSS resources',
   )
 })
 
+test('a rejected source names the file, the line and the text that matched', () => {
+  // The pattern is text-only, so a comment or a string trips it too — the message
+  // has to point at the match or the author cannot find it.
+  assert.throws(
+    () =>
+      buildPluginArchive({
+        ...source,
+        files: { ...source.files, 'plugin.js': 'maxcode.log("hi")\n// export the palette\nconst x = 1' },
+      }),
+    /plugin\.js:2.*"export"/,
+  )
+  assert.throws(() => buildPluginArchive({ ...source, files: { ...source.files, 'plugin.js': 'fetch("https://evil.test")' } }), /"fetch\("/)
+  assert.throws(
+    () => buildPluginArchive({ ...source, files: { ...source.files, 'plugin.css': '.a{}\n@import url("https://evil.test/x.css")' } }),
+    /plugin\.css:2/,
+  )
+})
+
 test('plugin archive rejects malformed or oversized archives', () => {
   assert.throws(() => readPluginArchive(new Uint8Array([0, 1, 2, 3])), /archive|zip|package/i)
   assert.throws(

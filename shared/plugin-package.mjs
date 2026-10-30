@@ -31,15 +31,25 @@ function packageError(message) {
 
 function validateSource(path, content) {
   const source = strFromU8(content)
-  if (path.endsWith('.js')) {
-    if (/\b(?:import|export)\b|\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|importScripts)\s*\(|\bnavigator\s*\.\s*sendBeacon\s*\(/i.test(source)) {
-      packageError('module imports and unmanaged network calls are forbidden')
-    }
-  } else if (path.endsWith('.css')) {
-    if (/@import\b|url\s*\(\s*(['"]?)(?!data:image\/(?:png|jpeg|gif|webp);base64,)[^)]*\)/i.test(source)) {
-      packageError('external CSS resources and imports are forbidden')
-    }
-  }
+  const rule = path.endsWith('.js')
+    ? [
+        /\b(?:import|export)\b|\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|importScripts)\s*\(|\bnavigator\s*\.\s*sendBeacon\s*\(/i,
+        'module imports and unmanaged network calls are forbidden',
+      ]
+    : path.endsWith('.css')
+      ? [
+          /@import\b|url\s*\(\s*(['"]?)(?!data:image\/(?:png|jpeg|gif|webp);base64,)[^)]*\)/i,
+          'external CSS resources and imports are forbidden',
+        ]
+      : null
+  if (!rule) return
+  const found = rule[0].exec(source)
+  if (!found) return
+  // The pattern is text-only, so it also fires inside a comment or a string. Say
+  // exactly where it landed, or the author has to hunt the keyword themselves.
+  const line = source.slice(0, found.index).split('\n').length
+  const hit = found[0].length > 60 ? `${found[0].slice(0, 60)}…` : found[0]
+  packageError(`${rule[1]}: found "${hit}" at ${path}:${line}`)
 }
 
 function safePath(value) {
