@@ -5,6 +5,16 @@ import { createPluginApi, emptyContributions, type PluginHostCalls } from './api
 
 const STYLE_ID = (id: string) => `maxcode-plugin-style-${id}`
 
+export const PLUGIN_THEME_PREFIX = 'plugin-'
+
+/** Plugin theme palettes become `[data-theme='plugin-<id>']` custom properties. */
+export function themeCss(pluginId: string, palette: Record<string, string>): string {
+  const tokens = Object.entries(palette)
+    .filter(([token, value]) => /^[a-z][a-z0-9-]*$/.test(token) && /^[\d\s.]+$/.test(value))
+    .map(([token, value]) => `--${token}:${value.trim()}`)
+  return tokens.length === 0 ? '' : `[data-theme='plugin-${pluginId}']{${tokens.join(';')}}`
+}
+
 export function styleElement(id: string): HTMLStyleElement | null {
   return document.getElementById(STYLE_ID(id)) as HTMLStyleElement | null
 }
@@ -25,6 +35,7 @@ export function removeStyles(id: string) {
 
 export interface PluginRuntime {
   contributions: Map<string, PluginContribution>
+  themes(): Array<{ id: string; label: string }>
   contributionsFor(id: string): PluginContribution
   commands(): Array<{ pluginId: string; id: string; label: string; run: () => void }>
   activate(plugin: InstalledPlugin, calls: PluginHostCalls): Promise<void>
@@ -47,6 +58,15 @@ export function createPluginRuntime(): PluginRuntime {
   return {
     contributions,
     contributionsFor: (id) => contributions.get(id) ?? emptyContributions(),
+    themes() {
+      const out: Array<{ id: string; label: string }> = []
+      for (const [pluginId, entry] of contributions) {
+        for (const [id, theme] of entry.themes) {
+          out.push({ id: `${PLUGIN_THEME_PREFIX}${pluginId}:${id}`, label: theme.label })
+        }
+      }
+      return out
+    },
     commands() {
       const out: Array<{ pluginId: string; id: string; label: string; run: () => void }> = []
       for (const [pluginId, entry] of contributions) {
@@ -68,7 +88,10 @@ export function createPluginRuntime(): PluginRuntime {
       try {
         const run = new Function('maxcode', `"use strict";\n${files[manifest.entry]}\n`)
         run(Object.freeze(api))
-        applyStyles(plugin.id, files[manifest.stylesheet] ?? '')
+        const themes = [...entry.themes.entries()]
+          .map(([id, theme]) => themeCss(`${plugin.id}:${id}`, theme.palette))
+          .join('\n')
+        applyStyles(plugin.id, `${files[manifest.stylesheet] ?? ''}\n${themes}`)
       } catch (error) {
         deactivate(plugin.id)
         throw new Error(`Plugin ${plugin.id} failed to start: ${error instanceof Error ? error.message : String(error)}`)

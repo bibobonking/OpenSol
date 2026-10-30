@@ -187,7 +187,6 @@ const TOOL_NAMES = new Set([
   'subagent',
 ])
 const SEARCH_PROVIDERS = new Set(['duckduckgo', 'tavily', 'brave', 'serper'])
-const THEMES = new Set(['light', 'dark', 'system', 'night-owl', 'claude-code', 'flame'])
 
 function sanitizeSettings(patch, current = {}) {
   const source = patch && typeof patch === 'object' ? patch : {}
@@ -208,7 +207,8 @@ function sanitizeSettings(patch, current = {}) {
   if (typeof source.searchProvider === 'string' && SEARCH_PROVIDERS.has(source.searchProvider)) {
     next.searchProvider = source.searchProvider
   }
-  if (typeof source.theme === 'string' && THEMES.has(source.theme)) next.theme = source.theme
+  // Plugin themes are named by their plugin, so accept any bounded theme slug.
+  if (typeof source.theme === 'string' && /^[a-z0-9-]{1,64}$/.test(source.theme)) next.theme = source.theme
   if (source.mode === 'build' || source.mode === 'plan') next.mode = source.mode
 
   if (source.providers && typeof source.providers === 'object') {

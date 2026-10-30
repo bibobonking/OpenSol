@@ -54,10 +54,9 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
     return { manifest, files: { 'main.js': js, 'main.css': css } }
   }
 
-  const build = (install: boolean) => {
+  const build = () => {
     try {
-      const archive = buildPluginArchive(sources())
-      return { archive }
+      return { archive: buildPluginArchive(sources()) }
     } catch (error) {
       notify(error instanceof Error ? error.message : 'That package could not be built.', 'error')
       return null
@@ -65,7 +64,7 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
   }
 
   const download = () => {
-    const built = build(false)
+    const built = build()
     if (!built) return
     const url = URL.createObjectURL(new Blob([built.archive as BlobPart], { type: 'application/zip' }))
     const link = document.createElement('a')
@@ -76,7 +75,7 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
   }
 
   const install = async () => {
-    const built = build(true)
+    const built = build()
     if (!built) return
     try {
       const { plugin } = await installPluginArchive(built.archive)
