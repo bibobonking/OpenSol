@@ -1,6 +1,7 @@
 import type { AgentMode, AppSettings } from '../types'
 import { activeModelId } from '../store/settings'
 import { useWorkspace } from '../store/workspace'
+import { kernel } from '../core/kernel'
 
 function workspaceContext(): string {
   const state = useWorkspace.getState()
@@ -26,6 +27,9 @@ function workspaceContext(): string {
 }
 
 export function buildSystemPrompt(settings: AppSettings, mode: AgentMode = settings.mode): string {
+  if (kernel.systemPrompt) {
+    return kernel.systemPrompt.assemble(settings, mode)
+  }
   const chunks: string[] = [settings.systemPrompt.trim()]
 
   const skills = settings.skills.filter((skill) => skill.enabled)

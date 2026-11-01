@@ -12,7 +12,7 @@ export interface PluginManifest {
   id: string
   name: string
   version: string
-  apiVersion: 1
+  apiVersion: 1 | 2
   entry: string
   stylesheet: string
   capabilities: PluginCapability[]

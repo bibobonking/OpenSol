@@ -42,7 +42,7 @@ function parseManifest(raw: string | Uint8Array): PluginManifest {
 }
 
 /**
- * Turns a picked folder or file set into the sources `.pluginmax` needs. The
+ * Turns a picked folder or file set into the sources a plugin package needs. The
  * folder's own `manifest.json` only seeds the form; the package manifest is
  * always rebuilt from the fields, so what you see is what gets packed.
  */
@@ -88,7 +88,7 @@ export function loadPluginFolder(picked: PickedFile[]): PluginFolder {
   )
   if (extra.length > 0) {
     throw new Error(
-      `A .pluginmax holds one script and one stylesheet. Remove or merge: ${extra.join(', ')}.`,
+      `A plugin package holds one script and one stylesheet. Remove or merge: ${extra.join(', ')}.`,
     )
   }
 

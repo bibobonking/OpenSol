@@ -63,7 +63,7 @@ export async function getPluginArchive(id) {
   const plugins = await readIndex()
   locate(plugins, id)
   try {
-    return await readFile(path.join(PLUGINS_DIR, `${id}.pluginmax`))
+    return await readFile(path.join(PLUGINS_DIR, `${id}.plugin.json`))
   } catch (error) {
     if (error?.code === 'ENOENT') throw new HttpError(404, 'Plugin package is missing.', 'plugin_package_missing')
     throw error
@@ -92,7 +92,7 @@ export async function installPlugin(bytes) {
       ? previous.grants
       : { capabilities: [], domains: [] },
   }
-  const archivePath = path.join(PLUGINS_DIR, `${record.id}.pluginmax`)
+  const archivePath = path.join(PLUGINS_DIR, `${record.id}.plugin.json`)
   await writeFile(archivePath, bytes, { mode: 0o600 })
   const next = previous
     ? plugins.map((item) => (item.id === record.id ? record : item))
@@ -154,7 +154,7 @@ export async function setPluginEnabled(id, enabled) {
 export async function uninstallPlugin(id) {
   const plugins = await readIndex()
   locate(plugins, id)
-  await rm(path.join(PLUGINS_DIR, `${id}.pluginmax`), { force: true })
+  await rm(path.join(PLUGINS_DIR, `${id}.plugin.json`), { force: true })
   await saveIndex(plugins.filter((item) => item.id !== id))
   return { id, removed: true }
 }

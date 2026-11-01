@@ -131,7 +131,7 @@ export function PluginManager() {
       setOpen(plugin.id)
       notify(`${plugin.manifest.name} installed. It starts sandboxed and disabled.`, 'success')
     } catch (error) {
-      notify(error instanceof Error ? error.message : 'That file is not a valid .pluginmax package.', 'error')
+      notify(error instanceof Error ? error.message : 'That file is not a valid plugin package.', 'error')
     } finally {
       setBusy(false)
     }
@@ -165,7 +165,7 @@ export function PluginManager() {
       <section className="rounded-xl border border-line bg-raised/20 p-3">
         <h3 className="text-[12px] font-medium text-ink">Install a local plugin</h3>
         <p className="mt-1 text-[10.5px] leading-relaxed text-faint">
-          MaxCode installs <code className="font-mono">.pluginmax</code> files you pick from this machine. New plugins
+          MaxCode installs <code className="font-mono">.plugin.json</code> packages you pick from this machine. New plugins
           start sandboxed and disabled until you review them.
         </p>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -176,12 +176,12 @@ export function PluginManager() {
             className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-[10.5px] font-medium text-on-accent hover:bg-accent/90 disabled:opacity-40"
           >
             <FolderOpen size={12} />
-            Choose .pluginmax
+            Choose plugin package
           </button>
           <input
             ref={fileRef}
             type="file"
-            accept=".pluginmax,application/zip"
+            accept=".plugin.json,.pluginmax,application/json,application/zip"
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0]

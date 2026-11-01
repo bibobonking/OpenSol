@@ -1,0 +1,8 @@
+node_modules
+dist
+docs
+CLAUDE.md
+Guide-Make-Plugin.md
+.superpowers
+.git
+.claude

@@ -30,7 +30,10 @@ On first launch, choose a real project folder, then add a provider key in **Sett
 - **Themes.** Light, Dark, Night Owl, Claude Code and Flame, plus System, which follows the OS preference. Syntax highlighting follows the theme.
 - **Real tools.** Read/write/edit files, grep, list files, shell, git, web search, URL reading and a read-only SubAgent. Each user turn renders as one answer, with consecutive tool rounds collapsed into a single “Used N tools” group.
 - **Turn queue.** A prompt sent while a turn is streaming waits its turn and runs next, instead of splitting into a second reply.
-- **Local plugins.** Install a `.pluginmax` archive from disk, review its workspace capabilities and declared HTTPS domains one by one, preview it in a sandbox, then mark it Safe to run its JavaScript. The same panel builds a package from a folder you pick — one `.js` entry, an optional stylesheet, a `manifest.json` if the folder has one — and a plugin that needs no network declares no domains. Packages and grants live under `~/.maxcode/plugins`, outside the selected workspace.
+- **Local plugins.** Two plugin modes:
+  - **API v1 (sandboxed):** Install a package, review its declared workspace capabilities and HTTPS domains, preview in a sandbox, mark it Safe. Plugin code gets a restricted API (`registerCommand`, `registerPanel`, `registerTheme`, workspace read/write, HTTPS-only network to declared hosts).
+  - **API v2 (free):** Plugin receives the full Cordis kernel context — register custom AI tools, hook into `agent/request` / `tools/execute` / `system-prompt/assemble` events, patch any app behaviour at runtime. No capability declarations needed. When removed, the Cordis fiber disposes automatically and the app returns to its original state — no source files are ever modified.
+  The same panel builds a package from a folder you pick. Packages live under `~/.maxcode/plugins`, outside the selected workspace.
 - **Workspace panel.** Folder tree, file editor, git status and quick file actions.
 - **Deploy.** Cloudflare Pages, Netlify and Vercel, for the open workspace or another existing folder. Tokens stay in the daemon and are passed to CLIs through environment variables.
 - **Local history.** Conversations, settings, workspaces and encrypted keys survive restarts.

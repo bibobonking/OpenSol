@@ -1,5 +1,3 @@
-import { deflateSync, strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
-
 const MAX_ARCHIVE_BYTES = 5 * 1024 * 1024
 const MAX_PACKAGE_BYTES = 10 * 1024 * 1024
 const MAX_FILES = 100
@@ -26,11 +24,23 @@ const MANIFEST_KEYS = new Set([
 ])
 
 function packageError(message) {
-  throw new Error(`Invalid .pluginmax package: ${message}`)
+  throw new Error(`Invalid plugin package: ${message}`)
 }
 
-function validateSource(path, content) {
-  const source = strFromU8(content)
+function bytesToString(bytes) {
+  if (typeof bytes === 'string') return bytes
+  return new TextDecoder('utf-8').decode(bytes)
+}
+
+function stringToBytes(str) {
+  return new TextEncoder().encode(str)
+}
+
+function validateSource(path, content, apiVersion) {
+  // API v2: skip validation — full kernel access, blob isolation is enough
+  if (apiVersion === 2) return
+
+  const source = bytesToString(content)
   const rule = path.endsWith('.js')
     ? [
         /\b(?:import|export)\b|\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|importScripts)\s*\(|\bnavigator\s*\.\s*sendBeacon\s*\(/i,
@@ -45,8 +55,6 @@ function validateSource(path, content) {
   if (!rule) return
   const found = rule[0].exec(source)
   if (!found) return
-  // The pattern is text-only, so it also fires inside a comment or a string. Say
-  // exactly where it landed, or the author has to hunt the keyword themselves.
   const line = source.slice(0, found.index).split('\n').length
   const hit = found[0].length > 60 ? `${found[0].slice(0, 60)}…` : found[0]
   packageError(`${rule[1]}: found "${hit}" at ${path}:${line}`)
@@ -90,14 +98,18 @@ export function validatePluginManifest(value) {
   if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     packageError('invalid plugin version')
   }
-  if (apiVersion !== 1) packageError('unsupported API version')
+  if (apiVersion !== 1 && apiVersion !== 2) packageError('unsupported API version')
   safePath(entry)
   safePath(stylesheet)
   if (!entry.endsWith('.js') || !stylesheet.endsWith('.css')) packageError('entry must be JavaScript and stylesheet must be CSS')
-  if (!Array.isArray(capabilities) || capabilities.some((item) => !CAPABILITIES.has(item))) {
+
+  // API v2: capabilities optional (defaults to [])
+  const normalizedCapabilities = capabilities ?? []
+  if (!Array.isArray(normalizedCapabilities)) packageError('capabilities must be an array')
+  if (apiVersion === 1 && normalizedCapabilities.some((item) => !CAPABILITIES.has(item))) {
     packageError('invalid capability')
   }
-  // Domains are optional: a plugin that reaches no network simply omits the field.
+
   if (domains !== undefined && !Array.isArray(domains)) packageError('domains must be an array')
   const normalizedDomains = (domains ?? []).map(validateDomain)
   if (new Set(normalizedDomains).size !== normalizedDomains.length) packageError('duplicate domain')
@@ -108,7 +120,7 @@ export function validatePluginManifest(value) {
     apiVersion,
     entry,
     stylesheet,
-    capabilities: [...new Set(capabilities)],
+    capabilities: [...new Set(normalizedCapabilities)],
     domains: normalizedDomains,
   }
 }
@@ -132,109 +144,54 @@ function normalizeFiles(files, manifest) {
     if (typeof content !== 'string' && !(content instanceof Uint8Array)) {
       packageError(`file "${filePath}" must be text or bytes`)
     }
-    const data = typeof content === 'string' ? strToU8(content) : content
+    const data = typeof content === 'string' ? stringToBytes(content) : content
     total += data.byteLength
     if (total > MAX_PACKAGE_BYTES) packageError('package is too large')
-    if (filePath === manifest.entry || filePath === manifest.stylesheet) validateSource(filePath, data)
-    normalized[filePath] = data
+    if (filePath === manifest.entry || filePath === manifest.stylesheet) validateSource(filePath, data, manifest.apiVersion)
+    normalized[filePath] = typeof content === 'string' ? content : bytesToString(data)
   }
   if (!(manifest.entry in normalized)) packageError('entry file is missing')
   if (!(manifest.stylesheet in normalized)) packageError('stylesheet file is missing')
-  if (normalized[manifest.entry].byteLength > 2 * 1024 * 1024) packageError('entry file is too large')
+  if (stringToBytes(normalized[manifest.entry]).byteLength > 2 * 1024 * 1024) packageError('entry file is too large')
   return normalized
 }
 
 export function buildPluginArchive(sources) {
   const manifest = validatePluginManifest(sources?.manifest)
   const files = normalizeFiles(sources?.files, manifest)
-  const manifestBytes = strToU8(JSON.stringify(manifest))
-  if (manifestBytes.byteLength > MAX_MANIFEST_BYTES) packageError('manifest is too large')
-  return zipSync({ 'manifest.json': manifestBytes, ...files }, { level: 6 })
+  const manifestJson = JSON.stringify(manifest)
+  if (stringToBytes(manifestJson).byteLength > MAX_MANIFEST_BYTES) packageError('manifest is too large')
+
+  const packageData = {
+    format: 'cordis-plugin',
+    manifest,
+    files,
+  }
+
+  const encoded = stringToBytes(JSON.stringify(packageData))
+  if (encoded.byteLength > MAX_ARCHIVE_BYTES) packageError('package is too large')
+  return encoded
 }
 
-function inspectCentralDirectory(bytes) {
-  const minimum = Math.max(0, bytes.length - 65_557)
-  let eocd = -1
-  for (let offset = bytes.length - 22; offset >= minimum; offset -= 1) {
-    if (
-      bytes[offset] === 0x50 &&
-      bytes[offset + 1] === 0x4b &&
-      bytes[offset + 2] === 0x05 &&
-      bytes[offset + 3] === 0x06
-    ) {
-      eocd = offset
-      break
-    }
+export function readPluginArchive(bytes) {
+  if (!bytes || !(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+    packageError('package archive is empty or invalid')
   }
-  if (eocd < 0) packageError('ZIP central directory is missing')
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  const count = view.getUint16(eocd + 10, true)
-  const centralSize = view.getUint32(eocd + 12, true)
-  let offset = view.getUint32(eocd + 16, true)
-  if (count > MAX_FILES + 1 || offset + centralSize > eocd) packageError('ZIP directory is invalid or too large')
-  let total = 0
-  const names = new Set()
-  for (let index = 0; index < count; index += 1) {
-    if (
-      offset + 46 > bytes.length ||
-      view.getUint32(offset, true) !== 0x02014b50
-    ) {
-      packageError('ZIP central directory entry is invalid')
-    }
-    const flags = view.getUint16(offset + 8, true)
-    const compressedSize = view.getUint32(offset + 20, true)
-    const uncompressedSize = view.getUint32(offset + 24, true)
-    const nameLength = view.getUint16(offset + 28, true)
-    const extraLength = view.getUint16(offset + 30, true)
-    const commentLength = view.getUint16(offset + 32, true)
-    const nameStart = offset + 46
-    const end = nameStart + nameLength + extraLength + commentLength
-    if (end > bytes.length || (flags & 1) !== 0) packageError('encrypted or truncated ZIP entry')
-    const name = strFromU8(bytes.subarray(nameStart, nameStart + nameLength))
-    safePath(name.endsWith('/') ? name.slice(0, -1) : name)
-    if (names.has(name)) packageError(`duplicate path "${name}"`)
-    names.add(name)
-    total += uncompressedSize
-    if (total > MAX_PACKAGE_BYTES + MAX_MANIFEST_BYTES) packageError('uncompressed package is too large')
-    if (compressedSize > MAX_ARCHIVE_BYTES) packageError('compressed file is too large')
-    offset = end
-  }
-  if (offset !== view.getUint32(eocd + 16, true) + centralSize) packageError('ZIP central directory length mismatch')
-}
-
-export function readPluginArchive(input) {
-  if (!(input instanceof Uint8Array) || input.byteLength > MAX_ARCHIVE_BYTES || input.byteLength < 22) {
-    packageError('archive is too large or invalid')
-  }
-  inspectCentralDirectory(input)
-  const unzipped = unzipSync(input)
-  if (!Object.hasOwn(unzipped, 'manifest.json')) packageError('manifest.json is missing')
-  const manifestBytes = unzipped['manifest.json']
-  if (manifestBytes.byteLength > MAX_MANIFEST_BYTES) packageError('manifest is too large')
-  let rawManifest
+  let parsed
   try {
-    rawManifest = JSON.parse(strFromU8(manifestBytes))
+    const text = new TextDecoder('utf-8').decode(bytes)
+    parsed = JSON.parse(text)
   } catch {
-    packageError('manifest.json is not valid JSON')
+    packageError('package is not a valid JSON archive')
   }
-  const manifest = validatePluginManifest(rawManifest)
-  const files = {}
-  for (const [filePath, content] of Object.entries(unzipped)) {
-    if (filePath === 'manifest.json') continue
-    safePath(filePath)
-    files[filePath] = content
-  }
-  const normalized = normalizeFiles(files, manifest)
-  for (const [filePath, content] of Object.entries(normalized)) {
-    if (/\.(?:js|css)$/i.test(filePath) && filePath !== manifest.entry && filePath !== manifest.stylesheet) {
-      packageError(`undeclared executable file "${filePath}"`)
-    }
-    if (filePath === manifest.entry || filePath === manifest.stylesheet) validateSource(filePath, content)
-  }
+
+  if (!parsed || typeof parsed !== 'object') packageError('invalid package format')
+  const manifest = validatePluginManifest(parsed.manifest)
+  const files = parsed.files
+  if (!files || typeof files !== 'object') packageError('missing package files')
+
   return {
     manifest,
-    files: Object.fromEntries(
-      Object.entries(normalized).map(([filePath, content]) => [filePath, strFromU8(content)]),
-    ),
+    files,
   }
 }

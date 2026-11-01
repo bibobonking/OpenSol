@@ -1,6 +1,7 @@
 import type { AgentMode, AppSettings, ToolName } from '../types'
 import { executeDaemonTool } from '../lib/daemon'
 import { useWorkspace } from '../store/workspace'
+import { kernel } from '../core/kernel'
 
 export interface JsonSchema {
   type: 'object'
@@ -69,6 +70,9 @@ export function getToolSchemas(
   mode: AgentMode = 'build',
   { subagent = false } = {},
 ): ToolSchema[] {
+  if (kernel.tools) {
+    return kernel.tools.schemas(settings, mode, { subagent })
+  }
   const tools: ToolSchema[] = [
     {
       name: 'shell',
@@ -474,6 +478,9 @@ export async function executeTool(
   mode: AgentMode,
   signal: AbortSignal,
 ): Promise<ToolResult> {
+  if (kernel.tools) {
+    return await kernel.tools.execute(name, args, settings, mode, signal)
+  }
   if (!settings.tools[name]?.enabled) {
     return { output: 'This tool is disabled in Settings → Tools.', isError: true }
   }

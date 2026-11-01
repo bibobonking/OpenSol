@@ -40,12 +40,14 @@ Messages are stored flat (`UserMessage | AssistantMessage | ToolMessage`) with a
 
 ## Plugins
 
-Lifecycle: install (disabled + untrusted) → review capabilities/domains → optional sandboxed preview → mark **Safe** → enable. A changed manifest hash invalidates grants and trust.
+Lifecycle: install (disabled + untrusted) → review capabilities/domains (v1) → optional sandboxed preview → mark **Safe** → enable. A changed manifest hash invalidates grants and trust.
 
-- `shared/plugin-package.mjs` is the package contract, shared verbatim by the browser and the daemon: `.pluginmax` is a ZIP (via `fflate`) with `manifest.json`, one JS entry, one CSS stylesheet, bounded assets. It is also the only place capability/domain/ID validation lives.
-- `server/lib/plugins.mjs` stores packages under `~/.maxcode/plugins` and is the **only** path to the network. `network.request` is HTTPS-only, port 443, exact host from `manifest.domains` ∩ `grants.domains`, private IPs blocked, redirects refused, content-type allowlist, 64 KB request / 1 MB response / 12 s timeout.
-- `src/plugins/api.ts` (`createPluginApi`) re-checks grants at every call site, so plugin code cannot reach an unapproved capability even by calling the API directly.
-- `src/plugins/runtime.ts` runs Safe plugins as **blob ES modules**, not `new Function`: the daemon's CSP (`server/lib/http.mjs`) has no `unsafe-eval`, and `blob:` was added to `script-src` for exactly this. Removing either breaks plugin activation.
+- `shared/plugin-package.mjs` is the package contract, shared verbatim by the browser and the daemon: plugin packages are zero-dependency UTF-8 JSON archives (`.plugin.json`) with `manifest`, one JS entry, one CSS stylesheet, bounded assets. Supports `apiVersion: 1` (legacy sandbox) and `apiVersion: 2` (free Cordis kernel plugin).
+- `src/plugins/runtime.ts` runs Safe plugins as **blob ES modules** (`const maxcode = ...` injected).
+  - **API v1**: Handed `createPluginApi` with capability guards, restricted host calls, and manual contribution tracking.
+  - **API v2**: Handed a scoped Cordis child `Context` (`kernel.plugin(fn)`). The plugin has 100% unrestricted access to internal services (`ctx.tools`, `ctx.ui`, `ctx.sessions`, `ctx.llm`, `ctx.on(...)`, events, stores). When deactivated/uninstalled, `fiber.dispose()` cleans up all hooks and registrations automatically without mutating files on disk.
+- `server/lib/plugins.mjs` stores packages under `~/.maxcode/plugins` and is the **only** path to the network for v1 plugins. `network.request` is HTTPS-only, port 443, exact host from `manifest.domains` ∩ `grants.domains`, private IPs blocked, redirects refused, content-type allowlist, 64 KB request / 1 MB response / 12 s timeout.
+- `src/plugins/api.ts` (`createPluginApi`) re-checks grants at every call site for v1 plugins.
 - `src/plugins/preview.ts` builds the sandboxed preview (`iframe sandbox="allow-scripts"`, deliberately **no** `allow-same-origin`) with a stub API and validates every postMessage through `bridge.mjs`.
 
 Safe is an explicit trust choice, not a sandbox — after Safe the plugin runs same-realm with full app privileges. The UI copy must keep saying so.

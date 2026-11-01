@@ -36,7 +36,7 @@ test('a manifest may omit domains entirely — a plugin with no network declares
 })
 
 test('the builder rejects an invalid manifest before packaging', () => {
-  assert.throws(() => validatePluginManifest({ ...manifest, id: 'Bad Id' }), /Invalid \.pluginmax package/)
+  assert.throws(() => validatePluginManifest({ ...manifest, id: 'Bad Id' }), /Invalid plugin package/)
   assert.throws(() => validatePluginManifest({ ...manifest, entry: 'main.ts' }), /entry must be JavaScript/)
   assert.throws(() => validatePluginManifest({ ...manifest, capabilities: ['shell.exec'] }), /capabilit/i)
   assert.throws(() => validatePluginManifest({ ...manifest, domains: ['https://api.example.com'] }), /domain/i)

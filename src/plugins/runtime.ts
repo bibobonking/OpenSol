@@ -4,6 +4,8 @@ import type { PluginContribution } from './types'
 import { registerTheme, unregisterTheme } from '../lib/themes'
 import { createPluginApi, emptyContributions, type PluginHostCalls } from './api'
 import { readPluginArchive } from '../../shared/plugin-package.mjs'
+import { kernel } from '../core/kernel'
+import type { Context } from 'cordis'
 
 const STYLE_ID = (id: string) => `maxcode-plugin-style-${id}`
 
@@ -59,10 +61,6 @@ interface PluginGlobals {
   __maxcodePluginApi?: unknown
 }
 
-/**
- * Runs plugin source as a blob ES module, which keeps the daemon's CSP free of
- * `unsafe-eval`: the source is handed the API through the identifier `maxcode`.
- */
 async function runPluginSource(source: string, api: unknown): Promise<void> {
   const scoped = globalThis as typeof globalThis & PluginGlobals
   const url = URL.createObjectURL(
@@ -78,16 +76,36 @@ async function runPluginSource(source: string, api: unknown): Promise<void> {
 }
 
 /**
- * Same-realm execution for plugins the user marked Safe. Anything not Safe stays
- * out; disabling or uninstalling drops its styles, commands, panels and themes.
+ * Same-realm execution for plugins the user marked Safe.
+ *
+ * **apiVersion 1** (legacy): plugin receives a restricted `PluginRuntimeApi`.
+ *
+ * **apiVersion 2** (free): plugin receives a Cordis child `Context` — full access
+ * to all kernel services: `ctx.tools.register()`, `ctx.ui.registerCommand()`,
+ * `ctx.on('agent/request', ...)`, `ctx.sessions`, `ctx.llm`, etc.
+ * The child scope is registered as a Cordis plugin (`kernel.plugin(fn)`).
+ * On deactivate, `fiber.dispose()` auto-cleans every hook and registration.
+ * The original source files on disk are never modified.
  */
 export function createPluginRuntime(): PluginRuntime {
+  // v1 legacy: manual contribution tracking
   const contributions = new Map<string, PluginContribution>()
+  // v2 free: Cordis fiber per plugin (dispose = full cleanup)
+  const fibers = new Map<string, { dispose(): Promise<void> }>()
 
   const deactivate = (id: string) => {
+    // v2 cleanup
+    const fiber = fibers.get(id)
+    if (fiber) {
+      fibers.delete(id)
+      void fiber.dispose()
+    }
+
+    // v1 cleanup
     const entry = contributions.get(id)
     if (entry) for (const theme of entry.themes.keys()) unregisterTheme(`${PLUGIN_THEME_PREFIX}${id}:${theme}`)
     contributions.delete(id)
+
     removeStyles(id)
   }
 
@@ -115,28 +133,62 @@ export function createPluginRuntime(): PluginRuntime {
       if (!plugin.safe || !plugin.enabled) return
 
       const { files, manifest } = readPluginArchive(await getInstalledPluginArchive(plugin.id))
-      const entry = contributions.get(plugin.id) ?? emptyContributions()
-      contributions.set(plugin.id, entry)
 
-      const api = createPluginApi(plugin, plugin.grants, calls, entry)
-      try {
-        await runPluginSource(files[manifest.entry] ?? '', Object.freeze(api))
-        const themes = [...entry.themes.entries()]
-          .map(([id, theme]) => {
-            const themeId = `${PLUGIN_THEME_PREFIX}${plugin.id}:${id}`
-            registerTheme({ id: themeId, label: theme.label, dark: isDarkPalette(theme.palette) })
-            return themeCss(themeId, theme.palette)
-          })
-          .join('\n')
-        applyStyles(plugin.id, `${files[manifest.stylesheet] ?? ''}\n${themes}`)
-      } catch (error) {
-        deactivate(plugin.id)
-        throw new Error(`Plugin ${plugin.id} failed to start: ${error instanceof Error ? error.message : String(error)}`)
+      if (manifest.apiVersion === 2) {
+        // Free plugin: load as a Cordis plugin function so the child ctx is
+        // scoped and fiber.dispose() auto-removes all hooks/registrations.
+        let resolve!: () => void
+        let reject!: (e: unknown) => void
+        const ready = new Promise<void>((res, rej) => { resolve = res; reject = rej })
+
+        const pluginFn = async (ctx: Context) => {
+          // Apply stylesheet (DOM side-effect — cleaned up via removeStyles in deactivate)
+          const css = files[manifest.stylesheet] ?? ''
+          if (css) applyStyles(plugin.id, css)
+
+          try {
+            await runPluginSource(files[manifest.entry] ?? '', ctx)
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+        }
+
+        const fiber = kernel.plugin(pluginFn)
+        fibers.set(plugin.id, fiber)
+
+        try {
+          await ready
+        } catch (error) {
+          deactivate(plugin.id)
+          throw new Error(`Plugin ${plugin.id} failed to start: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      } else {
+        // Legacy v1: restricted API
+        const entry = contributions.get(plugin.id) ?? emptyContributions()
+        contributions.set(plugin.id, entry)
+
+        const api = createPluginApi(plugin, plugin.grants, calls, entry)
+        try {
+          await runPluginSource(files[manifest.entry] ?? '', Object.freeze(api))
+          const themes = [...entry.themes.entries()]
+            .map(([id, theme]) => {
+              const themeId = `${PLUGIN_THEME_PREFIX}${plugin.id}:${id}`
+              registerTheme({ id: themeId, label: theme.label, dark: isDarkPalette(theme.palette) })
+              return themeCss(themeId, theme.palette)
+            })
+            .join('\n')
+          applyStyles(plugin.id, `${files[manifest.stylesheet] ?? ''}\n${themes}`)
+        } catch (error) {
+          deactivate(plugin.id)
+          throw new Error(`Plugin ${plugin.id} failed to start: ${error instanceof Error ? error.message : String(error)}`)
+        }
       }
     },
     deactivate,
     deactivateAll() {
-      for (const id of [...contributions.keys()]) deactivate(id)
+      const ids = [...new Set([...contributions.keys(), ...fibers.keys()])]
+      for (const id of ids) deactivate(id)
     },
   }
 }

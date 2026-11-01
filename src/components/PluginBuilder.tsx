@@ -6,6 +6,7 @@ import { installPluginArchive, type InstalledPlugin } from '../lib/daemon'
 import { isBinaryPath, loadPluginFolder, type PluginFolder } from '../lib/plugin-folder'
 import { formatBytes } from '../lib/utils'
 import { useUi } from '../store/ui'
+import { Switch } from './ui'
 
 const CAPABILITIES: PluginCapability[] = [
   'workspace.list',
@@ -33,6 +34,7 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
   const [id, setId] = useState('my-plugin')
   const [name, setName] = useState('My plugin')
   const [version, setVersion] = useState('1.0.0')
+  const [apiVersion, setApiVersion] = useState<1 | 2>(1)
   const [capabilities, setCapabilities] = useState<PluginCapability[]>(['ui.commands'])
   const [domains, setDomains] = useState('')
   const [folder, setFolder] = useState<PluginFolder | null>(null)
@@ -50,6 +52,7 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
         setId(next.manifest.id)
         setName(next.manifest.name)
         setVersion(next.manifest.version)
+        setApiVersion(next.manifest.apiVersion === 2 ? 2 : 1)
         setCapabilities(next.manifest.capabilities)
         setDomains(next.manifest.domains.join(', '))
       }
@@ -72,10 +75,10 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
         id: id.trim(),
         name: name.trim(),
         version: version.trim(),
-        apiVersion: 1,
+        apiVersion,
         entry: folder.entry,
         stylesheet: folder.stylesheet,
-        capabilities,
+        capabilities: apiVersion === 2 ? [] : capabilities,
         domains: domains
           .split(/[\s,]+/)
           .map((entry) => entry.trim())
@@ -95,10 +98,10 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
   const download = () => {
     const built = build()
     if (!built) return
-    const url = URL.createObjectURL(new Blob([built.archive as BlobPart], { type: 'application/zip' }))
+    const url = URL.createObjectURL(new Blob([built.archive as BlobPart], { type: 'application/json' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `${id.trim() || 'plugin'}.pluginmax`
+    link.download = `${id.trim() || 'plugin'}.plugin.json`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -121,7 +124,7 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
     <details className="rounded-xl border border-line bg-raised/20">
       <summary className="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-[11.5px] font-medium text-ink">
         <Hammer size={13} className="text-faint" />
-        Build a .pluginmax from a folder
+        Build a plugin package from a folder
       </summary>
       <div className="space-y-2.5 border-t border-line px-3 py-3">
         <p className="text-[10.5px] leading-relaxed text-faint">
@@ -129,6 +132,18 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
           optional <code className="font-mono">.css</code> stylesheet become the package. A{' '}
           <code className="font-mono">manifest.json</code> in the folder fills these fields in; the fields win.
         </p>
+
+        <div className="flex items-center gap-2 rounded-lg border border-line bg-panel px-2.5 py-2">
+          <Switch
+            checked={apiVersion === 2}
+            onChange={(on: boolean) => setApiVersion(on ? 2 : 1)}
+            label="API v2"
+          />
+          <span className="text-[10.5px] font-medium text-ink">API v2 — free plugin (full app access)</span>
+          {apiVersion === 2 && (
+            <span className="ml-auto text-[9.5px] text-accent">ctx = Cordis kernel scope</span>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -214,7 +229,9 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
         <div>
           <span className="text-[10px] font-medium text-muted">Capabilities</span>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            {CAPABILITIES.map((capability) => {
+            {apiVersion === 2 ? (
+              <p className="text-[10px] text-faint">Not needed — API v2 plugin has full access via the Cordis context.</p>
+            ) : CAPABILITIES.map((capability) => {
               const on = capabilities.includes(capability)
               return (
                 <button
@@ -252,7 +269,7 @@ export function PluginBuilder({ onInstalled }: { onInstalled?: (plugin: Installe
             onClick={download}
             className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-[10.5px] font-medium text-on-accent hover:bg-accent/90"
           >
-            Download .pluginmax
+            Download plugin package
           </button>
           <button
             type="button"

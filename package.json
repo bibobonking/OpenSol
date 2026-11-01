@@ -1,7 +1,7 @@
 {
-  "name": "maxcode",
-  "private": true,
-  "version": "1.0.0",
+  "name": "@bibobonking/maxcode",
+  "private": false,
+  "version": "2.0.0",
   "type": "module",
   "bin": {
     "maxcode": "./server/maxcode.mjs"
@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "cordis": "^4.0.0-rc.12",
     "fflate": "^0.8.2",
     "highlight.js": "^11.11.1",
     "lucide-react": "^0.544.0",
