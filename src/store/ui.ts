@@ -44,7 +44,16 @@ interface UiState {
   workspaceOpen: boolean
   setWorkspaceOpen: (open: boolean) => void
   settingsOpen: boolean
-  settingsTab: 'models' | 'tools' | 'search' | 'skills' | 'plugins' | 'deploy' | 'appearance' | 'about'
+  settingsTab:
+    | 'general'
+    | 'models'
+    | 'tools'
+    | 'search'
+    | 'skills'
+    | 'plugins'
+    | 'deploy'
+    | 'appearance'
+    | 'about'
   openSettings: (tab?: UiState['settingsTab']) => void
   closeSettings: () => void
   deployOpen: boolean
@@ -90,8 +99,8 @@ export const useUi = create<UiState>()((set, get) => ({
   workspaceOpen: false,
   setWorkspaceOpen: (open) => set({ workspaceOpen: open }),
   settingsOpen: false,
-  settingsTab: 'models',
-  openSettings: (tab = 'models') => set({ settingsOpen: true, settingsTab: tab, mobileSidebarOpen: false }),
+  settingsTab: 'general',
+  openSettings: (tab = 'general') => set({ settingsOpen: true, settingsTab: tab, mobileSidebarOpen: false }),
   closeSettings: () => set({ settingsOpen: false }),
   deployOpen: false,
   setDeployOpen: (open) => set({ deployOpen: open }),

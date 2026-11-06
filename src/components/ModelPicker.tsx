@@ -200,7 +200,7 @@ export function ModelPicker({
           ? { bottom: `${position.bottom}px` }
           : { top: `${position.top}px` }),
       }}
-      className="z-50 flex flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-float"
+      className="z-50 flex flex-col overflow-hidden rounded-2xl border border-line surface-lift shadow-float"
       role="dialog"
       aria-label="Choose a model"
     >

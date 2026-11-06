@@ -262,7 +262,8 @@ function sanitizeChats(payload) {
       ...raw,
       id: raw.id.slice(0, 120),
       title: typeof raw.title === 'string' ? raw.title.slice(0, 300) : 'Untitled',
-      messages: raw.messages.slice(0, 400),
+      // Keep the newest messages: slicing from the start dropped the latest replies.
+      messages: raw.messages.slice(-2000),
       updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
     })
   }

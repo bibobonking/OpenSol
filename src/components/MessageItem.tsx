@@ -6,10 +6,10 @@ import {
   ChevronDown,
   Copy,
   FileText,
+  LoaderCircle,
   RefreshCw,
   Settings2,
   Square,
-  Wrench,
 } from 'lucide-react'
 import type { AssistantMessage, ToolMessage, UserMessage } from '../types'
 import type { ConversationTurn } from '../lib/conversation'
@@ -21,7 +21,8 @@ import { toolLabel } from '../agent/tools'
 import { formatBytes, cn } from '../lib/utils'
 import { Markdown } from './Markdown'
 import { ToolCallCard } from './ToolCallCard'
-import { Spinner } from './ui'
+import { LogoMark } from './Logo'
+import { Mascot } from './Mascot'
 
 function formatTokens(value?: number) {
   if (!value) return ''
@@ -46,7 +47,7 @@ function UserBubble({ message }: { message: UserMessage }) {
             ))}
           </div>
         )}
-        <div className="rounded-2xl rounded-br-md border border-line/70 bg-raised px-4 py-2.5">
+        <div className="rounded-[18px] bg-raised px-3.5 py-2.5">
           {files.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {files.map((file) => (
@@ -62,7 +63,7 @@ function UserBubble({ message }: { message: UserMessage }) {
             </div>
           )}
           {message.content && (
-            <p className="whitespace-pre-wrap break-words text-[14.5px] leading-[1.65] text-ink">{message.content}</p>
+            <p className="chat-text whitespace-pre-wrap break-words leading-[1.65] text-ink">{message.content}</p>
           )}
         </div>
       </div>
@@ -70,59 +71,122 @@ function UserBubble({ message }: { message: UserMessage }) {
   )
 }
 
-export function UsedGroup({ tools }: { tools: ToolMessage[] }) {
+export function TaskCompletedBox({
+  tools,
+  intermediateMessages = [],
+  streaming = false,
+}: {
+  tools: ToolMessage[]
+  intermediateMessages?: AssistantMessage[]
+  streaming?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const autoOpened = useRef(false)
-  const active = tools.some((tool) => tool.status === 'running' || tool.status === 'awaiting')
+  const autoCollapse = useSettings((state) => state.autoCollapseWork)
+  const detailed = useSettings((state) => state.workDetail === 'detailed')
+  const mascot = useSettings((state) => state.mascot)
 
+  const awaiting = tools.some((tool) => tool.status === 'awaiting')
+  const active = streaming || tools.some((tool) => tool.status === 'running')
+
+  // Auto-open when awaiting approval or actively running
   useEffect(() => {
-    if (active) {
+    if (awaiting) {
+      setOpen(true)
+    } else if (active) {
       autoOpened.current = true
       setOpen(true)
-    } else if (autoOpened.current) {
+    } else if (autoOpened.current && autoCollapse) {
       autoOpened.current = false
       setOpen(false)
     }
-  }, [active])
+  }, [active, awaiting, autoCollapse])
 
-  if (tools.length === 0) return null
+  if (tools.length === 0 && intermediateMessages.length === 0) return null
+
   const labels = [...new Set(tools.map((tool) => toolLabel(tool.call.name)))]
   const failed = tools.filter((tool) => tool.status === 'error' || tool.status === 'denied').length
-  const summary = labels.length <= 2 ? labels.join(' · ') : `${labels.slice(0, 2).join(' · ')} +${labels.length - 2}`
+  const summary = labels.length <= 3 ? labels.join(' · ') : `${labels.slice(0, 3).join(' · ')} +${labels.length - 3}`
+
+  const taskItems = [
+    ...tools.map((t) => ({ kind: 'tool' as const, tool: t, time: t.createdAt })),
+    ...intermediateMessages.map((m) => ({ kind: 'assistant' as const, message: m, time: m.createdAt })),
+  ].sort((a, b) => a.time - b.time)
 
   return (
-    <div className="mt-3 overflow-hidden rounded-xl border border-line/80 bg-raised/30">
+    <div className="my-1.5 overflow-hidden rounded-xl border border-line/80 bg-transparent">
       <button
         type="button"
         onClick={() => {
           autoOpened.current = false
           setOpen((value) => !value)
         }}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-raised/40"
         aria-expanded={open}
       >
-        <Wrench size={12} className="shrink-0 text-faint" />
-        <span className="text-[11.5px] font-medium text-muted">Used {tools.length} tool{tools.length === 1 ? '' : 's'}</span>
-        <span className="min-w-0 truncate text-[10.5px] text-faint">{summary}</span>
-        {failed > 0 && <span className="shrink-0 text-[10px] text-danger">{failed} failed</span>}
-        {active ? (
-          <Spinner size={11} className="ml-auto shrink-0 text-accent" />
+        {awaiting ? (
+          mascot === 'off' ? <AlertCircle size={20} className="text-warning" /> : <Mascot id={mascot} mood="alert" size={26} />
+        ) : active ? (
+          mascot === 'off' ? <LoaderCircle size={20} className="animate-spin text-accent" /> : <Mascot id={mascot} mood="working" size={26} />
+        ) : failed > 0 ? (
+          mascot === 'off' ? <AlertCircle size={20} className="text-danger" /> : <Mascot id={mascot} mood="error" size={26} />
         ) : (
-          <ChevronDown
-            size={13}
-            className={cn('ml-auto shrink-0 text-faint transition-transform', open && 'rotate-180')}
-          />
+          mascot === 'off' ? <Check size={20} className="text-success" /> : <Mascot id={mascot} mood="happy" size={26} />
         )}
+
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className={cn('text-[12.5px] font-medium', awaiting ? 'text-warning' : 'text-ink')}>
+            {awaiting ? 'Action required' : active ? 'Running task…' : 'Task completed'}
+          </span>
+          <span className="truncate text-[11px] text-faint">
+            {tools.length > 0 && `Used ${tools.length} tool${tools.length === 1 ? '' : 's'}`}
+            {summary ? ` (${summary})` : ''}
+          </span>
+        </div>
+
+        {failed > 0 && (
+          <span className="shrink-0 rounded-full bg-danger/10 px-1.5 py-0.5 text-[9.5px] font-medium text-danger">
+            {failed} failed
+          </span>
+        )}
+
+        <div className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-faint">
+          <span className="hidden sm:inline">{open ? 'Hide' : 'Expand'}</span>
+          <ChevronDown
+            size={14}
+            className={cn('text-faint transition-transform duration-150', open && 'rotate-180')}
+          />
+        </div>
       </button>
+
       {open && (
-        <div className="space-y-1.5 border-t border-line/70 p-1.5">
-          {tools.map((tool) => (
-            <ToolCallCard key={tool.id} message={tool} compact />
-          ))}
+        <div className="space-y-2 border-t border-line/60 bg-raised/20 p-2.5">
+          {taskItems.map((item) =>
+            item.kind === 'tool' ? (
+              <ToolCallCard key={item.tool.id} message={item.tool} compact={!detailed} />
+            ) : (
+              <div key={item.message.id} className="rounded-xl border border-line/60 bg-panel p-2.5">
+                {item.message.reasoning.trim() && (
+                  <div className="thin-scroll max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-[10.5px] leading-relaxed text-muted">
+                    {item.message.reasoning}
+                  </div>
+                )}
+                {item.message.content.trim() && (
+                  <div className="mt-1 text-[12px] leading-relaxed text-ink">
+                    <Markdown content={item.message.content} />
+                  </div>
+                )}
+              </div>
+            ),
+          )}
         </div>
       )}
     </div>
   )
+}
+
+export function UsedGroup({ tools, streaming = false }: { tools: ToolMessage[]; streaming?: boolean }) {
+  return <TaskCompletedBox tools={tools} streaming={streaming} />
 }
 
 export function AssistantBlock({
@@ -185,7 +249,7 @@ export function AssistantBlock({
         <div className="min-w-0">
           {showHeader && (
             <div className="flex items-center gap-2 text-[12px] font-semibold text-ink">
-              MaxCode
+              OpenSol
               {modelName && <span className="font-normal text-faint">{modelName}</span>}
             </div>
           )}
@@ -208,9 +272,14 @@ export function AssistantBlock({
     <div className="group">
       <div className="min-w-0">
         {(showHeader || message.stopped) && (
-          <div className="flex min-h-[25px] items-center gap-2 text-[12px]">
-            {showHeader && <span className="font-semibold text-ink">MaxCode</span>}
-            {showHeader && modelName && <span className="truncate font-normal text-faint">{modelName}</span>}
+          <div className="flex min-h-[22px] items-center gap-1.5">
+            {showHeader && (
+              <>
+                <LogoMark size={15} />
+                <span className="text-[12px] font-medium text-muted">OpenSol</span>
+                {modelName && <span className="truncate text-[11.5px] text-faint">{modelName}</span>}
+              </>
+            )}
             {message.stopped && (
               <span className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 py-0.5 text-[9.5px] font-medium text-muted">
                 <Square size={7} fill="currentColor" />
@@ -221,21 +290,24 @@ export function AssistantBlock({
         )}
 
         {message.reasoning.trim() && (
-          <div className="mt-1.5 overflow-hidden rounded-lg border border-line/70 bg-raised/40">
+          <div className="mt-1 overflow-hidden rounded-lg border border-line/60">
             <button
               type="button"
               onClick={() => setReasoningOpen((value) => !value)}
-              className="flex w-full items-center gap-1.5 px-3 py-2 text-left"
+              className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-raised/40"
               aria-expanded={reasoningOpen}
             >
               <Brain size={12} className="text-faint" />
-              <span className="text-[11.5px] font-medium text-faint">
-                {streaming ? 'Thinking' : 'Reasoning'}
+              <span className="shrink-0 text-[11.5px] font-medium text-muted">
+                {streaming ? 'Thinking' : 'Thought'}
               </span>
               {streaming && <span className="animate-pulse text-accent">…</span>}
+              <span className="min-w-0 flex-1 truncate text-left text-[10.5px] text-faint">
+                {message.reasoning.replace(/\s+/g, ' ').trim().slice(0, 120)}
+              </span>
               <ChevronDown
                 size={12}
-                className={cn('ml-auto text-faint transition-transform', reasoningOpen && 'rotate-180')}
+                className={cn('shrink-0 text-faint transition-transform', reasoningOpen && 'rotate-180')}
               />
             </button>
             {reasoningOpen && (
@@ -247,7 +319,7 @@ export function AssistantBlock({
         )}
 
         {message.content && (
-          <div className="mt-2">
+          <div className="mt-1.5">
             <Markdown content={message.content} streaming={streaming} />
           </div>
         )}
@@ -264,7 +336,7 @@ export function AssistantBlock({
         )}
 
         {message.error && (
-          <div className="mt-3 rounded-xl border border-danger/25 bg-danger/[0.045] px-3.5 py-3">
+          <div className="mt-3 rounded-lg border border-danger/25 bg-danger/[0.035] px-3.5 py-3">
             <div className="flex items-start gap-2">
               <AlertCircle size={15} className="mt-0.5 shrink-0 text-danger" />
               <div className="min-w-0 flex-1">
@@ -298,30 +370,30 @@ export function AssistantBlock({
         )}
 
         {hasBody && !streaming && (
-          <div className="mt-1.5 flex min-h-[24px] flex-wrap items-center gap-0.5 text-[10.5px] text-faint">
+          <div className="mt-2 flex min-h-[28px] flex-wrap items-center gap-0.5 text-[11.5px] text-faint">
             {message.content && (
               <button
                 type="button"
                 onClick={copy}
-                className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 transition-colors hover:bg-raised hover:text-muted"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-raised hover:text-ink"
                 aria-label="Copy response"
+                title={copied ? 'Copied' : 'Copy'}
               >
-                {copied ? <Check size={11} /> : <Copy size={11} />}
-                {copied ? 'Copied' : 'Copy'}
+                {copied ? <Check size={14} className="text-success" /> : <Copy size={14} strokeWidth={1.7} />}
               </button>
             )}
             {isLastAssistant && (
               <button
                 type="button"
                 onClick={() => regenerateLastTurn(sessionId)}
-                className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 transition-colors hover:bg-raised hover:text-muted"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-raised hover:text-ink"
                 aria-label="Regenerate response"
+                title="Regenerate"
               >
-                <RefreshCw size={11} />
-                Regenerate
+                <RefreshCw size={14} strokeWidth={1.7} />
               </button>
             )}
-            <span className="ml-1.5">{metaLine}</span>
+            <span className="ml-2">{metaLine}</span>
           </div>
         )}
       </div>
@@ -334,30 +406,97 @@ export function TurnBlock({
   sessionId,
   streaming,
   lastAssistantId,
+  activeTurn = false,
 }: {
   turn: ConversationTurn
   sessionId: string
   streaming: boolean
   lastAssistantId?: string
+  /** True while this is the turn the agent is currently working on. */
+  activeTurn?: boolean
 }) {
-  const answers = turn.segments.filter((segment) => segment.kind === 'assistant').length
-  let seen = 0
+  const allTools: ToolMessage[] = []
+  const assistantMessages: AssistantMessage[] = []
+
+  for (const segment of turn.segments) {
+    if (segment.kind === 'tools') {
+      allTools.push(...segment.tools)
+    } else if (segment.kind === 'assistant') {
+      assistantMessages.push(segment.message)
+    }
+  }
+
+  const hasTools = allTools.length > 0
+  const firstAssistantId = assistantMessages[0]?.id
+  const finalAssistant = assistantMessages[assistantMessages.length - 1] ?? null
+
+  // While the agent is still working, every step is shown inline. Nothing is
+  // folded into "Task completed" until the whole turn actually finishes.
+  if (activeTurn && hasTools) {
+    return (
+      <div className="flex flex-col gap-2.5">
+        {turn.user && <UserBubble message={turn.user} />}
+        {turn.segments.map((segment, index) =>
+          segment.kind === 'tools' ? (
+            <div key={`tools-${index}`} className="space-y-1.5">
+              {segment.tools.map((tool) => (
+                <ToolCallCard key={tool.id} message={tool} />
+              ))}
+            </div>
+          ) : (
+            <AssistantBlock
+              key={segment.message.id}
+              message={segment.message}
+              sessionId={sessionId}
+              streaming={streaming && segment.message.id === lastAssistantId}
+              isLastAssistant={segment.message.id === lastAssistantId}
+              showHeader={segment.message.id === firstAssistantId}
+            />
+          ),
+        )}
+      </div>
+    )
+  }
+
+  // Finished turn with no tools: just the conversation.
+  if (!hasTools) {
+    let seen = 0
+    return (
+      <div className="flex flex-col gap-2.5">
+        {turn.user && <UserBubble message={turn.user} />}
+        {assistantMessages.map((message) => (
+          <AssistantBlock
+            key={message.id}
+            message={message}
+            sessionId={sessionId}
+            streaming={streaming && message.id === lastAssistantId}
+            isLastAssistant={message.id === lastAssistantId}
+            showHeader={seen++ === 0}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  // Finished turn: fold the tool calls and intermediate steps into one
+  // collapsible "Task completed" block; the final answer stays outside.
+  const intermediateAssistants = assistantMessages.slice(0, -1)
+
   return (
     <div className="flex flex-col gap-2.5">
       {turn.user && <UserBubble message={turn.user} />}
-      {turn.segments.map((segment, index) =>
-        segment.kind === 'tools' ? (
-          <UsedGroup key={`tools-${index}`} tools={segment.tools} />
-        ) : (
-          <AssistantBlock
-            key={segment.message.id}
-            message={segment.message}
-            sessionId={sessionId}
-            streaming={streaming && segment.message.id === lastAssistantId}
-            isLastAssistant={segment.message.id === lastAssistantId}
-            showHeader={seen++ === 0 && answers > 0}
-          />
-        ),
+
+      <TaskCompletedBox tools={allTools} intermediateMessages={intermediateAssistants} />
+
+      {finalAssistant && (
+        <AssistantBlock
+          key={finalAssistant.id}
+          message={finalAssistant}
+          sessionId={sessionId}
+          streaming={false}
+          isLastAssistant={finalAssistant.id === lastAssistantId}
+          showHeader={true}
+        />
       )}
     </div>
   )

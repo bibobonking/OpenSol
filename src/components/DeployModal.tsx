@@ -393,7 +393,7 @@ export function DeployModal() {
               <Terminal size={11} className="mt-0.5 shrink-0" />
               {tool?.installed
                 ? `${tool.label} ${tool.version ? `(${tool.version})` : ''} is installed locally.`
-                : `${tool?.label ?? meta.short} CLI is not installed; MaxCode will use npx for this deploy.`}
+                : `${tool?.label ?? meta.short} CLI is not installed; OpenSol will use npx for this deploy.`}
             </div>
           </div>
         </div>

@@ -97,7 +97,7 @@ export function Modal({
         aria-labelledby={labelledBy}
         tabIndex={-1}
         className={cn(
-          'modal-panel relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-panel shadow-float sm:max-h-[86dvh] sm:rounded-2xl',
+          'modal-panel relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line surface-lift shadow-float sm:max-h-[86dvh] sm:rounded-2xl',
           wide ? 'sm:w-[min(920px,94vw)]' : 'sm:w-[min(760px,94vw)]',
           className,
         )}
@@ -253,7 +253,7 @@ export function ToastHost() {
   const Icon = tone.icon
   return createPortal(
     <div
-      className="pointer-events-none fixed bottom-56 left-1/2 z-[100] flex w-[min(92vw,440px)] -translate-x-1/2 animate-rise items-start gap-2.5 rounded-xl border border-line bg-panel px-3.5 py-3 text-[12.5px] text-ink shadow-float sm:bottom-48"
+      className="pointer-events-none fixed bottom-56 left-1/2 z-[100] flex w-[min(92vw,440px)] -translate-x-1/2 animate-rise items-start gap-2.5 rounded-xl border border-line surface-lift px-3.5 py-3 text-[12.5px] text-ink shadow-float sm:bottom-48"
       role="status"
     >
       <Icon size={16} className={cn('mt-0.5 shrink-0', tone.className)} />

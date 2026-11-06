@@ -48,12 +48,16 @@ export async function ensureDataDir() {
 function enqueue(key, task) {
   const previous = queues.get(key) ?? Promise.resolve()
   const next = previous.then(task, task)
-  queues.set(
-    key,
-    next.finally(() => {
-      if (queues.get(key) === next) queues.delete(key)
-    }),
+  // The tail never rejects (callers handle `next`), so a failed write cannot
+  // surface as an unhandled rejection, and the entry is actually cleaned up.
+  const tail = next.then(
+    () => undefined,
+    () => undefined,
   )
+  queues.set(key, tail)
+  void tail.then(() => {
+    if (queues.get(key) === tail) queues.delete(key)
+  })
   return next
 }
 

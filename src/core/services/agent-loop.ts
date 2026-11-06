@@ -99,15 +99,21 @@ export class AgentLoopService extends Service {
       for (let round = 0; round < MAX_ROUNDS; round += 1) {
         totalRounds = round + 1
         if (controller.signal.aborted) break
-        const current = this.ctx.sessions.current(sessionId)
+        let current = this.ctx.sessions.current(sessionId)
         if (!current) break
 
         // Auto-compaction check before round 0
         if (round === 0) {
           const compacted = await this.ctx.compaction.checkAutoCompact(sessionId)
           if (compacted) {
+            // Compaction rewrites the whole transcript, so the original user message
+            // is gone: continue from the handoff message and the fresh session state.
             const refreshed = this.ctx.sessions.current(sessionId)
             if (!refreshed) break
+            const handoffId = lastUserMessageId(refreshed.messages)
+            if (!handoffId) break
+            userMessageId = handoffId
+            current = refreshed
           }
         }
 

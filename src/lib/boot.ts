@@ -49,7 +49,7 @@ export const useBoot = create<BootState>()((set, get) => ({
         error:
           error instanceof Error
             ? error.message
-            : 'MaxCode could not reach its local daemon.',
+            : 'OpenSol could not reach its local daemon.',
       })
     }
   },

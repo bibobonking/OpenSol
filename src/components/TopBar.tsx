@@ -1,12 +1,13 @@
 import {
-  Command,
   FolderOpen,
+  ListChecks,
   Menu,
   Moon,
   PanelLeftOpen,
   Rocket,
   Search,
   Settings,
+  Sparkles,
   Sun,
 } from 'lucide-react'
 import type { ChatSession } from '../types'
@@ -15,12 +16,23 @@ import { useUi } from '../store/ui'
 import { useWorkspace } from '../store/workspace'
 import { useActiveModel } from '../store/models'
 import { cn } from '../lib/utils'
+import { themeIsDark } from '../lib/themes'
 import { LogoMark } from './Logo'
 import { ContextBar } from './ContextBar'
 
+export type ChatViewMode = 'chat' | 'trajectory'
+
 const isApple = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
-export function TopBar({ session }: { session: ChatSession | null }) {
+export function TopBar({
+  session,
+  view,
+  onViewChange,
+}: {
+  session: ChatSession | null
+  view: ChatViewMode
+  onViewChange: (view: ChatViewMode) => void
+}) {
   const settings = useSettings()
   const update = useSettings((state) => state.update)
   const sidebarCollapsed = useUi((state) => state.sidebarCollapsed)
@@ -32,18 +44,18 @@ export function TopBar({ session }: { session: ChatSession | null }) {
   const setWorkspaceOpen = useUi((state) => state.setWorkspaceOpen)
   const setDeployOpen = useUi((state) => state.setDeployOpen)
   const workspace = useWorkspace((state) => state.info)
-  const entries = useWorkspace((state) => state.entries)
-  const fileCount = entries.filter((entry) => entry.type === 'file').length
   const activeModel = useActiveModel()
 
-  const isDark =
-    settings.theme === 'dark' ||
-    (settings.theme === 'system' &&
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches)
+  // Go through the theme registry so Night Owl, Claude Code, Flame and plugin themes count as dark.
+  const isDark = themeIsDark(
+    settings.theme,
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
+  )
+  const hasConversation = Boolean(session && session.messages.length > 0)
+  const turns = session?.messages.filter((message) => message.role === 'user').length ?? 0
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-line/80 bg-panel/85 px-3 backdrop-blur-sm sm:px-4">
+    <header className="relative flex h-[52px] shrink-0 items-center gap-2 border-b border-line/60 bg-panel px-3 sm:px-4">
       <button
         type="button"
         className="icon-button lg:hidden"
@@ -65,58 +77,71 @@ export function TopBar({ session }: { session: ChatSession | null }) {
         </button>
       )}
 
-      <div className="flex min-w-0 items-center gap-2 pl-0.5">
-        {!session && <LogoMark size={21} className="lg:hidden" />}
-        <div className="flex min-w-0 items-baseline gap-2">
-          <h1 className="truncate font-display text-[14px] font-medium tracking-[-0.01em] text-ink">
-            {session?.title ?? 'New conversation'}
-          </h1>
-          {session && session.messages.length > 0 && (
-            <span className="hidden shrink-0 text-[10px] text-faint sm:inline">
-              {session.messages.filter((message) => message.role === 'user').length} turn
-              {session.messages.filter((message) => message.role === 'user').length === 1 ? '' : 's'}
-            </span>
-          )}
-        </div>
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {!session && <LogoMark size={19} className="lg:hidden" />}
+        <h1 className="min-w-0 truncate text-[14px] font-medium tracking-[-0.005em] text-ink">
+          {session?.title ?? 'New conversation'}
+        </h1>
+        {hasConversation && (
+          <span className="hidden shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted sm:inline-flex">
+            {settings.mode === 'plan' ? <ListChecks size={11} /> : <Sparkles size={11} />}
+            {settings.mode === 'plan' ? 'Plan mode' : 'Build mode'}
+          </span>
+        )}
+        {hasConversation && (
+          <span className="hidden shrink-0 text-[11.5px] tabular-nums text-faint md:inline">
+            {turns} turn{turns === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => setWorkspaceOpen(!workspaceOpen)}
-        title={workspace.available ? workspace.root : 'Choose a workspace folder'}
-        className={cn(
-          'ml-3 hidden min-w-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] transition-colors sm:inline-flex',
-          workspaceOpen
-            ? 'border-accent/30 bg-accent-soft/60 text-accent'
-            : 'border-line bg-panel/60 text-muted hover:border-faint/35 hover:text-ink',
-        )}
-      >
-        <FolderOpen size={11} className="shrink-0" />
-        <span className="max-w-[150px] truncate">
-          {workspace.available ? workspace.name : 'No folder'}
-        </span>
-        {workspace.available && <span className="shrink-0 text-faint">{fileCount}</span>}
-      </button>
+      {hasConversation && (
+        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center rounded-lg border border-line/60 bg-raised/70 p-0.5 md:inline-flex">
+          {(['chat', 'trajectory'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onViewChange(value)}
+              aria-pressed={view === value}
+              className={cn(
+                'h-7 rounded-[6px] px-3 text-[11.5px] font-medium capitalize transition-colors',
+                view === value ? 'bg-panel text-ink shadow-pill' : 'text-muted hover:text-ink',
+              )}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <div className="ml-auto flex shrink-0 items-center gap-0.5">
-        {/* Context usage bar — only shown when a session is active */}
-        {session && session.messages.length > 0 && (
-          <div className="mr-1.5">
-            <ContextBar
-              messages={session.messages}
-              model={activeModel}
-              sessionId={session.id}
-            />
+      <div className="flex shrink-0 items-center gap-0.5">
+        {hasConversation && (
+          <div className="mr-1.5 hidden sm:block">
+            <ContextBar messages={session?.messages ?? []} model={activeModel} sessionId={session?.id ?? null} />
           </div>
         )}
         <button
           type="button"
-          className="hidden h-8 items-center gap-1.5 rounded-lg px-2 text-[10.5px] font-medium text-muted transition-colors hover:bg-raised hover:text-ink sm:inline-flex"
+          onClick={() => setWorkspaceOpen(!workspaceOpen)}
+          title={workspace.available ? workspace.root : 'Choose a workspace folder'}
+          className={cn(
+            'mr-1 hidden min-w-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors sm:inline-flex',
+            workspaceOpen
+              ? 'border-accent/30 bg-accent-soft/60 text-accent'
+              : 'border-line/80 text-muted hover:bg-raised/60 hover:text-ink',
+          )}
+        >
+          <FolderOpen size={13} className="shrink-0" />
+          <span className="max-w-[140px] truncate">{workspace.available ? workspace.name : 'No folder'}</span>
+        </button>
+        <button
+          type="button"
+          className="icon-button hidden sm:inline-flex"
           onClick={() => setDeployOpen(true)}
           title="Deploy the open workspace or another project"
+          aria-label="Deploy"
         >
-          <Rocket size={13} className="text-accent" />
-          Deploy
+          <Rocket size={16} strokeWidth={1.7} />
         </button>
         <button
           type="button"
@@ -126,15 +151,6 @@ export function TopBar({ session }: { session: ChatSession | null }) {
           aria-label="Open search and commands"
         >
           <Search size={16} />
-        </button>
-        <button
-          type="button"
-          className={cn('icon-button hidden sm:inline-flex', workspaceOpen && 'bg-raised text-ink')}
-          onClick={() => setWorkspaceOpen(!workspaceOpen)}
-          title="Toggle workspace panel"
-          aria-label="Toggle workspace panel"
-        >
-          <FolderOpen size={16} />
         </button>
         <button
           type="button"
@@ -148,15 +164,12 @@ export function TopBar({ session }: { session: ChatSession | null }) {
         <button
           type="button"
           className="icon-button"
-          onClick={() => openSettings('models')}
+          onClick={() => openSettings('general')}
           title="Settings"
           aria-label="Open settings"
         >
           <Settings size={16} />
         </button>
-        <span className="ml-1 hidden items-center gap-1 rounded-md border border-line px-1.5 py-1 text-[9.5px] text-faint md:inline-flex">
-          <Command size={9} />K
-        </span>
       </div>
     </header>
   )

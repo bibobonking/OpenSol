@@ -10,13 +10,17 @@ import {
 } from 'react'
 import {
   Brain,
+  Check,
   ChevronDown,
   Cpu,
   FileText,
+  FolderOpen,
   Globe2,
+  ListChecks,
   Paperclip,
   ShieldCheck,
   Slash,
+  Sparkles,
   Square,
   Upload,
   X,
@@ -25,11 +29,15 @@ import type { Attachment, Effort } from '../types'
 import { activeModelId, hasCredentials, useSettings } from '../store/settings'
 import { useActiveModel, useProviderModels } from '../store/models'
 import { useUi } from '../store/ui'
+import { useWorkspace } from '../store/workspace'
 import { effortLabel } from '../data/providers'
 import { effortOptions } from '../lib/reasoning'
+import { PERMISSION_MODES, permissionLabel, permissionMode, permissionTools } from '../lib/permissions'
+import { useClickOutside } from '../lib/hooks'
 import { cn, formatBytes, readFileAsDataUrl, readFileAsText } from '../lib/utils'
 import { ModelPicker } from './ModelPicker'
-import { Segmented } from './ui'
+import { Mascot } from './Mascot'
+import type { MascotMood } from '../lib/mascot'
 
 const TEXT_EXTENSIONS = /\.(txt|md|markdown|ts|tsx|js|jsx|mjs|cjs|json|css|scss|html|vue|svelte|py|go|rs|rb|java|kt|cs|c|h|cpp|hpp|php|swift|sh|bash|zsh|yml|yaml|toml|ini|sql|csv|xml|gitignore|env)$/i
 const MAX_ATTACHMENTS = 6
@@ -62,7 +70,11 @@ export function Composer({
   streaming,
   hints = false,
   autoFocus = false,
-  placeholder = 'Message MaxCode',
+  placeholder = 'How can I help you today?',
+  contextPct,
+  contextTitle,
+  mascotMood,
+  surface = 'conversation',
 }: {
   value: string
   onChange: (value: string) => void
@@ -73,6 +85,10 @@ export function Composer({
   hints?: boolean
   autoFocus?: boolean
   placeholder?: string
+  contextPct?: number
+  contextTitle?: string
+  mascotMood?: MascotMood
+  surface?: 'home' | 'conversation'
 }) {
   const settings = useSettings()
   const update = useSettings((state) => state.update)
@@ -80,15 +96,22 @@ export function Composer({
   const notify = useUi((state) => state.notify)
   const openSettings = useUi((state) => state.openSettings)
   const focusToken = useUi((state) => state.composerFocus)
+  const setWorkspaceOpen = useUi((state) => state.setWorkspaceOpen)
+  const workspace = useWorkspace((state) => state.info)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [focused, setFocused] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [permissionOpen, setPermissionOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [commandIndex, setCommandIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const modelTriggerRef = useRef<HTMLButtonElement>(null)
+  const permissionRef = useRef<HTMLDivElement>(null)
+  const permissionTriggerRef = useRef<HTMLButtonElement>(null)
+
+  useClickOutside(permissionRef, () => setPermissionOpen(false), permissionOpen, permissionTriggerRef)
 
   const modelId = activeModelId(settings)
   const providerModels = useProviderModels(settings.provider)
@@ -96,6 +119,7 @@ export function Composer({
   const connected = hasCredentials(settings)
   const efforts = effortOptions(activeModel)
   const activeSkills = settings.skills.filter((skill) => skill.enabled).length
+  const permission = permissionMode(settings.tools)
   const modelLabel = !connected
     ? 'No provider'
     : modelId
@@ -308,13 +332,21 @@ export function Composer({
   }
 
   const disabledSend = (!value.trim() && attachments.length === 0) || submitting || streaming
+  const contextTone =
+    contextPct === undefined
+      ? ''
+      : contextPct >= 95
+        ? 'text-danger'
+        : contextPct >= 70
+          ? 'text-warning'
+          : 'text-faint'
 
   return (
     <div className="relative w-full">
       <ModelPicker open={pickerOpen && connected} onClose={() => setPickerOpen(false)} triggerRef={modelTriggerRef} />
 
       {commandMatches.length > 0 && (
-        <div className="absolute bottom-[calc(100%+8px)] left-0 z-40 w-[min(94vw,360px)] overflow-hidden rounded-xl border border-line bg-panel shadow-float">
+        <div className="absolute bottom-[calc(100%+8px)] left-0 z-40 w-[min(94vw,360px)] overflow-hidden rounded-xl border border-line surface-lift shadow-float">
           <div className="flex items-center gap-1.5 border-b border-line px-3 py-2 text-[10px] font-medium uppercase tracking-[0.12em] text-faint">
             <Slash size={10} /> Commands
           </div>
@@ -338,6 +370,70 @@ export function Composer({
         </div>
       )}
 
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setWorkspaceOpen(true)}
+          className="chip h-7 max-w-[220px] gap-1.5 px-2.5 text-[11px]"
+          title={workspace.available ? workspace.root : 'Choose a project folder'}
+        >
+          <FolderOpen size={12} className="shrink-0 text-faint" />
+          <span className="truncate">{workspace.available ? workspace.name : 'No folder'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode(settings.mode === 'plan' ? 'build' : 'plan')}
+          className="chip h-7 gap-1.5 px-2.5 text-[11px]"
+          title={settings.mode === 'plan' ? 'Switch to Build mode' : 'Switch to Plan mode (read-only)'}
+        >
+          {settings.mode === 'plan' ? (
+            <ListChecks size={12} className="text-faint" />
+          ) : (
+            <Sparkles size={12} className="text-faint" />
+          )}
+          {settings.mode === 'plan' ? 'Plan mode' : 'Build mode'}
+        </button>
+        <button
+          type="button"
+          onClick={() => update({ webSearchEnabled: !settings.webSearchEnabled })}
+          className={cn('chip h-7 gap-1.5 px-2.5 text-[11px]', settings.webSearchEnabled && 'chip-active')}
+          title="Allow OpenSol to search the web and read pages"
+          aria-pressed={settings.webSearchEnabled}
+        >
+          <Globe2 size={12} />
+          Search
+        </button>
+        <label
+          className={cn('chip h-7 cursor-pointer gap-1 px-2', !efforts.length && 'cursor-not-allowed opacity-45')}
+          title={efforts.length ? 'Reasoning effort sent to the model' : 'This model advertises no effort levels'}
+        >
+          <Brain size={12} />
+          <select
+            value={settings.effort}
+            disabled={!efforts.length}
+            onChange={(event) => update({ effort: event.target.value as Effort })}
+            className="bg-transparent text-[11px] font-medium text-ink outline-none disabled:cursor-not-allowed"
+            aria-label="Reasoning effort"
+          >
+            {(efforts.length ? efforts : [settings.effort]).map((effort) => (
+              <option key={effort} value={effort}>
+                {effortLabel(effort)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {activeSkills > 0 && (
+          <button
+            type="button"
+            onClick={() => openSettings('skills')}
+            className="chip h-7 gap-1 px-2.5 text-[11px]"
+            title="Manage loaded skills"
+          >
+            {activeSkills} skill{activeSkills === 1 ? '' : 's'}
+          </button>
+        )}
+      </div>
+
       <div
         onDragOver={(event) => {
           if (!event.dataTransfer.types.includes('Files')) return
@@ -349,16 +445,17 @@ export function Composer({
         }}
         onDrop={onDrop}
         className={cn(
-          'relative rounded-[24px] border bg-panel transition-all duration-200 composer-shadow',
+          'surface-lift composer-shadow relative rounded-[20px] border transition-all duration-200',
           focused || dragging ? 'border-accent/35' : 'border-line',
+          streaming && 'composer-glow border-accent/30',
           dragging && 'ring-4 ring-accent/10',
         )}
       >
         {focused && !dragging && (
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] ring-4 ring-accent/[0.035]" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-0 rounded-[20px] ring-4 ring-accent/[0.03]" aria-hidden="true" />
         )}
 
-        <div className="relative px-3 pb-1 pt-2.5">
+        <div className="relative px-4 pb-1 pt-3">
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-1 pb-2">
               {attachments.map((attachment) =>
@@ -410,96 +507,69 @@ export function Composer({
             onBlur={() => setFocused(false)}
             placeholder={placeholder}
             rows={1}
-            aria-label="Message MaxCode"
-            className="block w-full resize-none bg-transparent px-1 py-1.5 text-[15px] leading-[1.6] text-ink outline-none placeholder:text-faint"
+            aria-label="Message OpenSol"
+            className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-[1.6] text-ink outline-none placeholder:text-faint"
             style={{ minHeight: 52, maxHeight: 220 }}
           />
         </div>
 
-        <div className="flex items-end justify-between gap-2 px-3 pb-2.5 pt-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <button
-              ref={modelTriggerRef}
-              type="button"
-              disabled={!connected}
-              onClick={() => setPickerOpen((open) => !open)}
-              className="chip max-w-[170px] pl-2.5 disabled:cursor-not-allowed disabled:opacity-45 sm:max-w-[210px]"
-              title={connected ? 'Choose model and reasoning effort' : 'Add a provider key in Settings first'}
-            >
-              <Cpu size={13} className="shrink-0 text-faint" />
-              <span className="truncate">{modelLabel}</span>
-              <ChevronDown
-                size={12}
-                className={cn('shrink-0 text-faint transition-transform duration-150', pickerOpen && 'rotate-180')}
-              />
-            </button>
-
-            <Segmented
-              options={[
-                { value: 'build', label: 'Build', title: 'Inspect, edit and run commands' },
-                { value: 'plan', label: 'Plan', title: 'Read-only investigation and a plan' },
-              ]}
-              value={settings.mode}
-              onChange={(mode) => setMode(mode)}
-            />
-
-            <label
-              className={cn('chip cursor-pointer gap-1 px-2', !efforts.length && 'cursor-not-allowed opacity-45')}
-              title={
-                efforts.length
-                  ? 'Reasoning effort sent to the model'
-                  : 'This model advertises no effort levels'
-              }
-            >
-              <Brain size={13} />
-              <span className="text-[9.5px] uppercase tracking-[0.08em] text-faint">Effort</span>
-              <select
-                value={settings.effort}
-                disabled={!efforts.length}
-                onChange={(event) => update({ effort: event.target.value as Effort })}
-                className="bg-transparent text-[11px] font-medium text-ink outline-none disabled:cursor-not-allowed"
-                aria-label="Reasoning effort"
-              >
-                {(efforts.length ? efforts : [settings.effort]).map((effort) => (
-                  <option key={effort} value={effort}>
-                    {effortLabel(effort)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              type="button"
-              onClick={() => update({ webSearchEnabled: !settings.webSearchEnabled })}
-              className={cn('chip', settings.webSearchEnabled && 'chip-active')}
-              title="Allow MaxCode to search the web and read pages"
-              aria-pressed={settings.webSearchEnabled}
-            >
-              <Globe2 size={13} />
-              <span className="hidden sm:inline">Search</span>
-            </button>
-
-            {activeSkills > 0 && (
+        <div className="flex items-end justify-between gap-2 px-2.5 pb-2 pt-1">
+          <div className="flex min-w-0 items-center gap-0.5">
+            <div className="relative">
               <button
+                ref={permissionTriggerRef}
                 type="button"
-                onClick={() => openSettings('skills')}
-                className="hidden items-center gap-1 rounded-full border border-line px-2 py-1 text-[10px] text-faint transition-colors hover:border-faint/40 hover:text-ink sm:inline-flex"
-                title="Manage loaded skills"
+                onClick={() => setPermissionOpen((open) => !open)}
+                className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-muted transition-colors hover:bg-raised hover:text-ink"
+                title="Choose how much OpenSol can do without asking"
+                aria-expanded={permissionOpen}
               >
-                {activeSkills} skill{activeSkills === 1 ? '' : 's'}
+                <ShieldCheck size={13} className="text-faint" />
+                {permissionLabel(permission)}
+                <ChevronDown size={11} className={cn('text-faint transition-transform', permissionOpen && 'rotate-180')} />
               </button>
-            )}
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1">
+              {permissionOpen && (
+                <div
+                  ref={permissionRef}
+                  className="surface-lift absolute bottom-[calc(100%+8px)] left-0 z-40 w-[290px] overflow-hidden rounded-2xl border border-line p-1.5 shadow-float"
+                >
+                  <p className="px-2 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-faint">
+                    Permissions
+                  </p>
+                  {PERMISSION_MODES.map((entry) => (
+                    <button
+                      key={entry.value}
+                      type="button"
+                      onClick={() => {
+                        update({ tools: permissionTools(settings.tools, entry.value) })
+                        setPermissionOpen(false)
+                      }}
+                      className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-raised"
+                    >
+                      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                        {permission === entry.value ? (
+                          <Check size={12} className="text-accent" />
+                        ) : (
+                          <span className="h-1.5 w-1.5 rounded-full bg-line" />
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[11.5px] font-medium text-ink">{entry.label}</span>
+                        <span className="mt-0.5 block text-[10px] leading-relaxed text-faint">{entry.description}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               type="button"
-              className="icon-button"
+              className="icon-button h-8 w-8"
               onClick={() => fileRef.current?.click()}
               title="Attach images or text files"
               aria-label="Attach files"
             >
-              <Paperclip size={16} />
+              <Paperclip size={15} />
             </button>
             <input
               ref={fileRef}
@@ -512,6 +582,33 @@ export function Composer({
                 event.target.value = ''
               }}
             />
+          </div>
+
+          <div className="flex min-w-0 shrink-0 items-center gap-1">
+            {contextPct !== undefined && (
+              <span
+                className={cn('hidden items-center gap-1 px-1 text-[10.5px] tabular-nums sm:flex', contextTone)}
+                title={contextTitle}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                {contextPct}%
+              </span>
+            )}
+            <button
+              ref={modelTriggerRef}
+              type="button"
+              disabled={!connected}
+              onClick={() => setPickerOpen((open) => !open)}
+              className="flex h-8 max-w-[190px] items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-muted transition-colors hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-45 sm:max-w-[260px]"
+              title={connected ? 'Choose model and reasoning effort' : 'Add a provider key in Settings first'}
+            >
+              <Cpu size={12} className="shrink-0 text-faint" />
+              <span className="truncate">{modelLabel}</span>
+              <ChevronDown
+                size={11}
+                className={cn('shrink-0 text-faint transition-transform duration-150', pickerOpen && 'rotate-180')}
+              />
+            </button>
             {streaming ? (
               <button
                 type="button"
@@ -529,30 +626,41 @@ export function Composer({
                 disabled={disabledSend}
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-full transition-all duration-150',
-                  disabledSend
-                    ? 'cursor-not-allowed bg-raised text-faint'
-                    : 'bg-accent text-on-accent hover:bg-accent/90',
+                  disabledSend ? 'cursor-not-allowed bg-raised text-faint' : 'bg-accent text-on-accent hover:brightness-110',
                 )}
                 aria-label="Send message"
                 title="Send (Enter)"
               >
-                {submitting ? <span className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" /> : <ArrowUpIcon />}
+                {submitting ? (
+                  <span className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+                ) : (
+                  <ArrowUpIcon />
+                )}
               </button>
             )}
           </div>
         </div>
 
         {dragging && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-[24px] border-2 border-dashed border-accent/45 bg-panel/95">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-[20px] border-2 border-dashed border-accent/45 bg-panel/95">
             <Upload size={18} className="text-accent" />
             <p className="text-[12px] font-medium text-ink">Drop files to attach</p>
             <p className="text-[10.5px] text-faint">Images up to 5 MB · text up to 512 KB</p>
           </div>
         )}
+
+        {mascotMood && settings.mascot !== 'off' && (settings.mascotScope === 'all' || surface === 'home') && (
+          <Mascot
+            id={settings.mascot}
+            mood={mascotMood}
+            size={64}
+            className="pointer-events-none absolute -top-[70px] right-2 z-10 hidden drop-shadow-sm sm:inline-flex"
+          />
+        )}
       </div>
 
       {hints && (
-        <div className="mt-2.5 flex items-center justify-between gap-4 px-1 text-[10px] text-faint">
+        <div className="mt-2.5 flex items-center justify-between gap-4 px-2 text-[11px] text-faint">
           <span className="hidden sm:inline">Enter to send · Shift + Enter for a new line · / for commands</span>
           <span className="flex items-center gap-1 sm:ml-auto">
             <ShieldCheck size={11} />

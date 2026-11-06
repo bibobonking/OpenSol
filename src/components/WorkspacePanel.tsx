@@ -113,7 +113,7 @@ function FolderPicker({ onDone }: { onDone?: () => void }) {
       <div className="border-b border-line px-4 py-4">
         <p className="font-display text-[19px] font-semibold tracking-[-0.02em] text-ink">Choose a real folder</p>
         <p className="mt-1 text-[11.5px] leading-relaxed text-muted">
-          MaxCode works directly in this folder through the local daemon. Nothing is uploaded.
+          OpenSol works directly in this folder through the local daemon. Nothing is uploaded.
         </p>
       </div>
 
@@ -381,7 +381,7 @@ export function WorkspacePanel() {
         onClick={() => setOpen(false)}
         className="fixed inset-0 z-40 cursor-default bg-ink/20 backdrop-blur-[1px] xl:hidden"
       />
-      <aside className="fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(96vw,440px)] flex-col border-l border-line bg-panel shadow-float xl:static xl:z-auto xl:w-[390px] xl:shadow-none">
+      <aside className="fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(96vw,440px)] flex-col border-l border-line surface-lift shadow-float xl:static xl:z-auto xl:w-[390px] xl:shadow-none">
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-line px-3">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft text-accent">
             <FolderOpen size={14} />
@@ -665,7 +665,7 @@ export function WorkspacePanel() {
                     onClick={async () => {
                       const confirmed = await askConfirm({
                         title: 'Forget this workspace?',
-                        body: 'The folder stays on disk. MaxCode stops showing it and closes the current file.',
+                        body: 'The folder stays on disk. OpenSol stops showing it and closes the current file.',
                         confirmLabel: 'Forget workspace',
                       })
                       if (confirmed) await forgetWorkspace()

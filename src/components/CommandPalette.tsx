@@ -181,7 +181,7 @@ export function CommandPalette() {
       },
       {
         id: 'action-about',
-        label: 'About MaxCode',
+        label: 'About OpenSol',
         hint: 'Local storage and reset controls',
         group: 'Settings',
         icon: Info,
@@ -304,7 +304,7 @@ export function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="Search and commands"
-        className="modal-panel relative flex max-h-[min(72dvh,560px)] w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-float"
+        className="modal-panel relative flex max-h-[min(72dvh,560px)] w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-line surface-lift shadow-float"
       >
         <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line px-3.5">
           <Search size={15} className="shrink-0 text-faint" />
@@ -407,7 +407,7 @@ export function CommandPalette() {
               <kbd className="rounded border border-line bg-panel px-1">↵</kbd> open
             </span>
           </span>
-          <span>MaxCode</span>
+          <span>OpenSol</span>
         </div>
       </div>
     </div>,

@@ -1,13 +1,13 @@
 /**
  * ContextBar — compact context-usage indicator shown in the TopBar.
  *
- * Displays a segmented progress bar and a token estimate. When the session
- * is being compacted it shows a pulsing "Compacting…" state. Colour grades
- * from neutral → amber → red as the context fills up.
+ * Displays a small progress bar and a token percentage. When the session is
+ * being compacted it shows a pulsing "Compacting…" state. Colour grades from
+ * neutral → warning → danger as the context fills up.
  */
 
 import { useMemo } from 'react'
-import { Zap, AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Zap } from 'lucide-react'
 import type { ModelInfo, Message } from '../types'
 import { getContextUsage, AUTO_COMPACT_THRESHOLD } from '../lib/context'
 import { isCompacting } from '../agent/compact'
@@ -32,69 +32,40 @@ export function ContextBar({ messages, model, sessionId }: ContextBarProps) {
   if (messages.length === 0) return null
 
   const { pct, used, limit } = usage
-
-  // Colour thresholds
-  const isWarning = pct >= 70 && pct < AUTO_COMPACT_THRESHOLD * 100
   const isDanger = pct >= AUTO_COMPACT_THRESHOLD * 100
-  const isCritical = pct >= 95
-
-  const barColor = isCritical
-    ? 'bg-red-500'
-    : isDanger
-      ? 'bg-orange-500'
-      : isWarning
-        ? 'bg-amber-400'
-        : 'bg-accent'
-
-  const textColor = isCritical
-    ? 'text-red-400'
-    : isDanger
-      ? 'text-orange-400'
-      : isWarning
-        ? 'text-amber-400'
-        : 'text-faint'
+  const isWarning = pct >= 70 && !isDanger
 
   return (
     <div
       className={cn(
-        'hidden items-center gap-2 sm:flex',
-        'h-7 rounded-md border border-line/60 bg-base/40 px-2.5 text-[9.5px]',
-        isDanger && 'border-orange-500/30 bg-orange-500/5',
-        isCritical && 'border-red-500/40 bg-red-500/8',
+        'hidden h-6 items-center gap-1.5 rounded-full border border-line/60 bg-raised/40 px-2 text-[9.5px] sm:flex',
+        isWarning && 'border-warning/30 text-warning',
+        isDanger && 'border-danger/30 text-danger',
       )}
       title={`Context: ~${formatTokens(used)} / ${formatTokens(limit)} tokens (${pct}%)`}
     >
       {compacting ? (
-        <span className="flex items-center gap-1.5 animate-pulse text-accent">
+        <span className="flex animate-pulse items-center gap-1 text-accent">
           <Zap size={9} className="shrink-0" />
           Compacting…
         </span>
       ) : (
         <>
-          {/* Icon */}
           {isDanger ? (
-            <AlertTriangle size={9} className={cn('shrink-0', textColor)} />
+            <AlertTriangle size={9} className="shrink-0" />
           ) : (
-            <Zap size={9} className={cn('shrink-0', textColor)} />
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
           )}
-
-          {/* Progress bar */}
-          <div className="relative h-1.5 w-16 overflow-hidden rounded-full bg-raised/80">
+          <div className="relative h-1 w-10 overflow-hidden rounded-full bg-line">
             <div
-              className={cn('absolute inset-y-0 left-0 rounded-full transition-all duration-500', barColor)}
+              className={cn(
+                'absolute inset-y-0 left-0 rounded-full transition-all duration-500',
+                isDanger ? 'bg-danger' : isWarning ? 'bg-warning' : 'bg-accent',
+              )}
               style={{ width: `${Math.min(pct, 100)}%` }}
             />
           </div>
-
-          {/* Percentage label */}
-          <span className={cn('tabular-nums', textColor)}>
-            {pct}%
-          </span>
-
-          {/* Token estimate */}
-          <span className="text-faint/60">
-            {formatTokens(used)}/{formatTokens(limit)}
-          </span>
+          <span className="tabular-nums">{pct}%</span>
         </>
       )}
     </div>

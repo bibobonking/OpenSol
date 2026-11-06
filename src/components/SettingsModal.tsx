@@ -19,6 +19,8 @@ import {
   Info,
   Link2,
   LockKeyhole,
+  Monitor,
+  Moon,
   Package,
   Palette,
   Plus,
@@ -27,8 +29,10 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   SquareTerminal,
+  Sun,
   Terminal,
   Trash2,
   Upload,
@@ -53,15 +57,19 @@ import { stopAllRuns } from '../agent'
 import { applySnapshot } from '../lib/boot'
 import { executeDaemonTool, resetScope } from '../lib/daemon'
 import { effortOptions, reasoningSummary } from '../lib/reasoning'
+import { PERMISSION_MODES, permissionMode, permissionTools } from '../lib/permissions'
 import { cn, formatBytes, readFileAsText } from '../lib/utils'
 import { LogoMark } from './Logo'
+import { Mascot } from './Mascot'
+import { MASCOTS, type MascotId } from '../lib/mascot'
 import { PluginManager } from './PluginManager'
 import { pluginRuntime } from '../plugins'
 import { Modal, Segmented, Spinner, Switch } from './ui'
 
 const TABS = [
+  { id: 'general', label: 'General', icon: SlidersHorizontal, description: 'Permissions, appearance and conversation display.' },
   { id: 'models', label: 'Models', icon: Cpu, description: 'Providers, encrypted keys, live models and reasoning defaults.' },
-  { id: 'tools', label: 'Tools', icon: Wrench, description: 'What MaxCode can do on this machine, and when it must ask.' },
+  { id: 'tools', label: 'Tools', icon: Wrench, description: 'What OpenSol can do on this machine, and when it must ask.' },
   { id: 'search', label: 'Search', icon: Globe2, description: 'Give the agent current web results with your own key.' },
   { id: 'skills', label: 'Skills', icon: Sparkles, description: 'Instructions added to every request when enabled.' },
   { id: 'plugins', label: 'Plugins', icon: Package, description: 'Install local plugin packages, review what they ask for, and run them once you trust the code.' },
@@ -806,7 +814,7 @@ function SearchTab() {
     try {
       const response = await executeDaemonTool(
         'web_search',
-        { query: 'MaxCode local coding agent', provider: settings.searchProvider },
+        { query: 'OpenSol local coding agent', provider: settings.searchProvider },
         'build',
       )
       const result = response.result && typeof response.result === 'object' ? (response.result as Record<string, unknown>) : {}
@@ -1407,7 +1415,7 @@ function DeployTab() {
 
       <SettingsSection
         title="Command-line tools"
-        description="MaxCode uses an installed CLI when available and falls back to npx. Node.js must be on PATH."
+        description="OpenSol uses an installed CLI when available and falls back to npx. Node.js must be on PATH."
       >
         <div className="overflow-hidden rounded-xl border border-line">
           {(Object.keys(DEPLOY_META) as DeployProviderId[]).map((provider, index) => {
@@ -1453,10 +1461,181 @@ function PluginsTab() {
   return (
     <SettingsSection
       title="Local plugins"
-      description="MaxCode only installs plugin packages you choose from this machine. A plugin stays sandboxed and disabled until you review its permissions and mark it Safe."
+      description="OpenSol only installs plugin packages you choose from this machine. A plugin stays sandboxed and disabled until you review its permissions and mark it Safe."
     >
       <PluginManager />
     </SettingsSection>
+  )
+}
+
+function GeneralTab() {
+  const settings = useSettings()
+  const update = useSettings((state) => state.update)
+  const openSettings = useUi((state) => state.openSettings)
+  const notify = useUi((state) => state.notify)
+  const permission = permissionMode(settings.tools)
+
+  const quickThemes = [
+    { id: 'light' as const, label: 'Light', icon: Sun },
+    { id: 'dark' as const, label: 'Dark', icon: Moon },
+    { id: 'system' as const, label: 'System', icon: Monitor },
+  ]
+
+  const copyConfig = async () => {
+    const path = settings.daemon?.dataDir ?? '~/.maxcode'
+    try {
+      await navigator.clipboard.writeText(path)
+      notify(`Copied the data folder path: ${path}`, 'success')
+    } catch {
+      notify(`Data folder: ${path}`, 'info')
+    }
+  }
+
+  return (
+    <div className="px-5 py-2 sm:px-7">
+      <div className="settings-row">
+        <div className="min-w-0">
+          <p className="settings-label">Permission</p>
+          <p className="settings-hint">Choose the default permission mode for new sessions.</p>
+        </div>
+        <select
+          value={permission}
+          onChange={(event) =>
+            update({ tools: permissionTools(settings.tools, event.target.value as typeof permission) })
+          }
+          className={cn('settings-select w-full sm:w-[210px]')}
+          aria-label="Default permission mode"
+        >
+          {PERMISSION_MODES.map((entry) => (
+            <option key={entry.value} value={entry.value}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="settings-row">
+        <div className="min-w-0">
+          <p className="settings-label">Appearance</p>
+          <p className="settings-hint">Follow the system or pick a fixed theme.</p>
+        </div>
+        <div className="w-full sm:w-[360px]">
+          <div className="grid grid-cols-3 gap-2">
+            {quickThemes.map((theme) => {
+              const Icon = theme.icon
+              const selected = settings.theme === theme.id
+              return (
+                <button
+                  key={theme.id}
+                  type="button"
+                  onClick={() => update({ theme: theme.id })}
+                  className={cn(
+                    'flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 transition-colors',
+                    selected
+                      ? 'border-accent/60 bg-panel text-ink ring-2 ring-accent/10'
+                      : 'border-line text-muted hover:border-faint/50 hover:text-ink',
+                  )}
+                >
+                  <Icon size={16} />
+                  <span className="text-[11px] font-medium">{theme.label}</span>
+                </button>
+              )
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => openSettings('appearance')}
+            className="mt-2 text-[11px] font-medium text-muted transition-colors hover:text-ink"
+          >
+            More themes and theme previews →
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="min-w-0">
+          <p className="settings-label">Font size</p>
+          <p className="settings-hint">Only affects conversation content.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={settings.chatFontSize}
+            onChange={(event) => update({ chatFontSize: Number(event.target.value) })}
+            className={cn('settings-select w-[84px] text-center')}
+            aria-label="Conversation font size"
+          >
+            {Array.from({ length: 9 }, (_, index) => index + 12).map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+          <span className="text-[11px] text-faint">px</span>
+        </div>
+      </div>
+
+      <div className="settings-row">
+        <div className="min-w-0">
+          <p className="settings-label">Work details</p>
+          <p className="settings-hint">Choose how much detail to show for tool calls.</p>
+        </div>
+        <select
+          value={settings.workDetail}
+          onChange={(event) => update({ workDetail: event.target.value === 'concise' ? 'concise' : 'detailed' })}
+          className={cn('settings-select w-full sm:w-[180px]')}
+          aria-label="Work details"
+        >
+          <option value="concise">Concise</option>
+          <option value="detailed">Detailed</option>
+        </select>
+      </div>
+
+      <div className="settings-row">
+        <div className="min-w-0">
+          <p className="settings-label">When to collapse work details</p>
+          <p className="settings-hint">Choose when to automatically collapse work details.</p>
+        </div>
+        <select
+          value={settings.autoCollapseWork ? 'completion' : 'never'}
+          onChange={(event) => update({ autoCollapseWork: event.target.value === 'completion' })}
+          className={cn('settings-select w-full sm:w-[180px]')}
+          aria-label="When to collapse work details"
+        >
+          <option value="completion">On completion</option>
+          <option value="never">Never</option>
+        </select>
+      </div>
+
+      <div className="settings-row">
+        <div className="min-w-0">
+          <p className="settings-label">Show token estimates</p>
+          <p className="settings-hint">When a provider does not report usage, show a rough output estimate.</p>
+        </div>
+        <Switch
+          checked={settings.showTokenEstimate}
+          onChange={(showTokenEstimate) => update({ showTokenEstimate })}
+          label="Show token estimates"
+        />
+      </div>
+
+      <div className="settings-row">
+        <div className="min-w-0">
+          <p className="settings-label">Local configuration</p>
+          <p className="settings-hint">Settings, conversations and encrypted keys live in this folder.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void copyConfig()}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-panel px-3 text-[11.5px] font-medium text-ink transition-colors hover:bg-raised"
+          title={settings.daemon?.dataDir ?? '~/.maxcode'}
+        >
+          <HardDrive size={13} />
+          Copy data folder path
+        </button>
+      </div>
+
+      <p className="py-4 text-[10.5px] text-faint">Changes are saved automatically to this computer.</p>
+    </div>
   )
 }
 
@@ -1464,15 +1643,12 @@ function AppearanceTab() {
   const settings = useSettings()
   const update = useSettings((state) => state.update)
   const themes = [
-    { id: 'light' as const, label: 'Light', className: 'bg-[#fcfcfc]', line: 'bg-[#e2e2e5]' },
-    { id: 'dark' as const, label: 'Dark', className: 'bg-[#09090b]', line: 'bg-[#2a2a31]' },
-    { id: 'night-owl' as const, label: 'Night Owl', className: 'bg-[#011627]', line: 'bg-[#1a3e5a]' },
-    { id: 'claude-code' as const, label: 'Claude Code', className: 'bg-[#262624]', line: 'bg-[#42423e]' },
-    { id: 'flame' as const, label: 'Flame', className: 'bg-[#130d0c]', line: 'bg-[#3e2621]' },
+    { id: 'light' as const, label: 'Light', className: 'bg-[#ffffff]', line: 'bg-[#e9e9e9]' },
+    { id: 'dark' as const, label: 'Dark', className: 'bg-[#191919]', line: 'bg-[#333333]' },
     {
       id: 'system' as const,
       label: 'System',
-      className: 'bg-gradient-to-br from-[#fcfcfc] to-[#09090b]',
+      className: 'bg-gradient-to-br from-[#ffffff] to-[#191919]',
       line: 'bg-[#8a8a92]',
     },
     // Themes contributed by Safe plugins.
@@ -1512,6 +1688,61 @@ function AppearanceTab() {
               </button>
             )
           })}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Mascot"
+        description="Choose the pixel companion. Helium is the default; Clawd is an optional Anthropic character."
+      >
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {(Object.keys(MASCOTS) as MascotId[]).map((id) => {
+            const selected = settings.mascot === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update({ mascot: id })}
+                className={cn(
+                  "rounded-xl border p-2 text-left transition-colors",
+                  selected ? "border-accent ring-2 ring-accent/10" : "border-line hover:border-faint/50",
+                )}
+              >
+                <span className="flex h-12 items-center justify-center rounded-lg bg-raised/40">
+                  {id === "off" ? (
+                    <span className="text-[10px] text-faint">None</span>
+                  ) : (
+                    <Mascot id={id} mood="idle" size={32} />
+                  )}
+                </span>
+                <span className="mt-1.5 flex items-center justify-between px-0.5">
+                  <span className="text-[10.5px] font-medium text-ink">{MASCOTS[id].label}</span>
+                  {selected && <Check size={11} className="text-accent" />}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        {settings.mascot === "clawd" && (
+          <p className="mt-2 text-[10px] leading-relaxed text-faint">
+            Anthropic character; optional fan mascot. Not covered by the MIT license.
+          </p>
+        )}
+        <div className="settings-row mt-4">
+          <div className="min-w-0">
+            <p className="settings-label">Where it appears</p>
+            <p className="settings-hint">Home only, or the home screen and the conversation.</p>
+          </div>
+          <select
+            value={settings.mascotScope}
+            disabled={settings.mascot === "off"}
+            onChange={(event) => update({ mascotScope: event.target.value === "home" ? "home" : "all" })}
+            className="settings-select w-full sm:w-[210px]"
+            aria-label="Mascot placement"
+          >
+            <option value="all">Home and conversation</option>
+            <option value="home">Home only</option>
+          </select>
         </div>
       </SettingsSection>
 
@@ -1578,7 +1809,7 @@ function AboutTab() {
           ? 'Conversation history cleared.'
           : scope === 'settings'
             ? 'Settings restored to defaults.'
-            : 'MaxCode was reset.',
+            : 'OpenSol was reset.',
         'success',
       )
     } catch (cause) {
@@ -1595,13 +1826,13 @@ function AboutTab() {
           <LogoMark size={46} />
           <div>
             <div className="flex flex-wrap items-baseline gap-2">
-              <h3 className="font-display text-[20px] font-semibold tracking-[-0.03em] text-ink">MaxCode</h3>
+              <h3 className="font-display text-[20px] font-semibold tracking-[-0.03em] text-ink">OpenSol</h3>
               <span className="text-[10px] text-faint">v{daemon?.version ?? '1.0.0'}</span>
             </div>
-            <p className="mt-0.5 text-[10.5px] font-medium text-muted">A DevSoft product</p>
+            <p className="mt-0.5 text-[10.5px] font-medium text-muted">An OpenSoft product</p>
             <p className="mt-2 max-w-[520px] text-[10.5px] leading-relaxed text-muted">
               A local-first coding agent with a real workspace, shell, git, web research, subagents and deploy flows.
-              No MaxCode account and no DevSoft server. Your keys never leave this machine.
+              No OpenSol account and no OpenSoft server. Your keys never leave this machine.
             </p>
           </div>
         </div>
@@ -1619,7 +1850,7 @@ function AboutTab() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Local data" description="Everything is stored under ~/.maxcode. Clearing that folder removes MaxCode’s local state.">
+      <SettingsSection title="Local data" description="Everything is stored under ~/.maxcode. Clearing that folder removes OpenSol’s local state.">
         <div className="space-y-1.5 rounded-lg border border-line bg-raised/30 px-3 py-2.5 text-[10px]">
           <p className="flex items-center justify-between gap-3">
             <span className="text-faint">Data folder</span>
@@ -1730,7 +1961,7 @@ function AboutTab() {
           </div>
           <div className="flex flex-col gap-2 rounded-lg border border-danger/20 bg-danger/[0.02] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[11px] font-medium text-ink">Reset MaxCode</p>
+              <p className="text-[11px] font-medium text-ink">Reset OpenSol</p>
               <p className="mt-0.5 text-[9.5px] text-muted">
                 Delete conversations, encrypted keys, skills, settings and the remembered workspace.
               </p>
@@ -1761,89 +1992,112 @@ export function SettingsModal() {
   const tab = useUi((state) => state.settingsTab)
   const close = useUi((state) => state.closeSettings)
   const openSettings = useUi((state) => state.openSettings)
-  const meta = TABS.find((item) => item.id === tab) ?? TABS[0]
+  const notify = useUi((state) => state.notify)
+  const daemon = useSettings((state) => state.daemon)
   const contentRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (open) contentRef.current?.scrollTo({ top: 0 })
   }, [open, tab])
 
+  const copyConfig = async () => {
+    const path = daemon?.dataDir ?? '~/.maxcode'
+    try {
+      await navigator.clipboard.writeText(path)
+      notify(`Copied the data folder path: ${path}`, 'success')
+    } catch {
+      notify(`Data folder: ${path}`, 'info')
+    }
+  }
+
   return (
-    <Modal open={open} onClose={close} labelledBy="settings-title" className="h-[92dvh] p-0 sm:h-[min(88dvh,760px)]">
-      <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-[208px] shrink-0 flex-col border-r border-line bg-canvas sm:flex">
-          <div className="flex h-14 items-center gap-2 border-b border-line px-4">
-            <LogoMark size={22} />
-            <span className="font-display text-[16px] font-semibold tracking-[-0.02em] text-ink">MaxCode</span>
-            <span className="ml-auto text-[9px] text-faint">Settings</span>
+    <Modal
+      open={open}
+      onClose={close}
+      labelledBy="settings-title"
+      className="h-[92dvh] p-0 sm:h-[min(88dvh,780px)] sm:w-[min(980px,94vw)]"
+    >
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-5">
+          <h2 id="settings-title" className="text-[16px] font-semibold tracking-[-0.02em] text-ink">
+            Settings
+          </h2>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void copyConfig()}
+              className="hidden h-8 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-[11px] font-medium text-ink transition-colors hover:bg-raised sm:inline-flex"
+              title={daemon?.dataDir ?? '~/.maxcode'}
+            >
+              <HardDrive size={12} />
+              Data folder
+            </button>
+            <button type="button" className="icon-button" onClick={close} aria-label="Close settings">
+              <X size={16} />
+            </button>
           </div>
-          <nav className="flex-1 space-y-0.5 p-2">
-            {TABS.map((item) => {
-              const Icon = item.icon
-              const active = tab === item.id
-              return (
+        </div>
+
+        <div className="flex min-h-0 flex-1">
+          <aside className="hidden w-[200px] shrink-0 flex-col border-r border-line bg-canvas sm:flex">
+            <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
+              {TABS.map((item) => {
+                const Icon = item.icon
+                const active = tab === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => openSettings(item.id)}
+                    title={item.description}
+                    className={cn(
+                      'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[12.5px] transition-colors',
+                      active ? 'bg-raised font-medium text-ink' : 'text-muted hover:bg-raised/60 hover:text-ink',
+                    )}
+                  >
+                    <Icon size={14} className={cn(active ? 'text-ink' : 'text-faint')} />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </nav>
+            <div className="border-t border-line p-3">
+              <p className="flex items-center gap-1.5 text-[9px] text-faint">
+                <LockKeyhole size={10} />
+                Keys encrypted on this machine
+              </p>
+              <p className="mt-1 text-[9px] text-faint">OpenSol · OpenSoft</p>
+            </div>
+          </aside>
+
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="thin-scroll flex shrink-0 gap-1 overflow-x-auto border-b border-line px-3 py-2 sm:hidden">
+              {TABS.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => openSettings(item.id)}
                   className={cn(
-                    'flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[11.5px] transition-colors',
-                    active ? 'bg-panel font-medium text-ink shadow-pill' : 'text-muted hover:bg-raised hover:text-ink',
+                    'shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-medium transition-colors',
+                    tab === item.id ? 'bg-ink text-panel' : 'text-muted hover:bg-raised',
                   )}
                 >
-                  <Icon size={13} className={cn(active ? 'text-accent' : 'text-faint')} />
                   {item.label}
                 </button>
-              )
-            })}
-          </nav>
-          <div className="border-t border-line p-3">
-            <p className="flex items-center gap-1.5 text-[9px] text-faint">
-              <LockKeyhole size={10} />
-              Keys encrypted on this machine
-            </p>
-            <p className="mt-1 text-[9px] text-faint">MaxCode 1.0 · DevSoft</p>
-          </div>
-        </aside>
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-5 py-3.5 sm:px-7">
-            <div className="min-w-0">
-              <h2 id="settings-title" className="font-display text-[19px] font-semibold tracking-[-0.02em] text-ink">
-                {meta.label}
-              </h2>
-              <p className="mt-0.5 text-[10.5px] text-muted">{meta.description}</p>
+              ))}
             </div>
-            <button type="button" className="icon-button -mr-1 shrink-0" onClick={close} aria-label="Close settings">
-              <X size={16} />
-            </button>
-          </div>
 
-          <div className="thin-scroll flex shrink-0 gap-1 overflow-x-auto border-b border-line px-3 py-2 sm:hidden">
-            {TABS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => openSettings(item.id)}
-                className={cn(
-                  'shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-medium transition-colors',
-                  tab === item.id ? 'bg-ink text-panel' : 'text-muted hover:bg-raised',
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <div ref={contentRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
-            {tab === 'models' && <ModelsTab />}
-            {tab === 'tools' && <ToolsTab />}
-            {tab === 'search' && <SearchTab />}
-            {tab === 'skills' && <SkillsTab />}
-            {tab === 'plugins' && <PluginsTab />}
-            {tab === 'deploy' && <DeployTab />}
-            {tab === 'appearance' && <AppearanceTab />}
-            {tab === 'about' && <AboutTab />}
+            <div ref={contentRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
+              {tab === 'general' && <GeneralTab />}
+              {tab === 'models' && <ModelsTab />}
+              {tab === 'tools' && <ToolsTab />}
+              {tab === 'search' && <SearchTab />}
+              {tab === 'skills' && <SkillsTab />}
+              {tab === 'plugins' && <PluginsTab />}
+              {tab === 'deploy' && <DeployTab />}
+              {tab === 'appearance' && <AppearanceTab />}
+              {tab === 'about' && <AboutTab />}
+            </div>
           </div>
         </div>
       </div>

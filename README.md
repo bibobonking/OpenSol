@@ -1,6 +1,6 @@
-# MaxCode
+# OpenSol
 
-A local-first AI coding agent by DevSoft. MaxCode pairs a warm React chat interface with a zero-dependency Node daemon that owns the real workspace, shell, git, search, deploy and provider credentials on your machine.
+A local-first AI coding agent by OpenSoft. OpenSol pairs a warm React chat interface with a zero-dependency Node daemon that owns the real workspace, shell, git, search, deploy and provider credentials on your machine.
 
 The daemon binds to `127.0.0.1` only. It serves the prebuilt app from `dist/` and stores everything under `~/.maxcode`. API keys and hosting tokens are encrypted with AES-256-GCM using a local `master.key`; the browser only ever receives a masked hint.
 
@@ -27,7 +27,8 @@ On first launch, choose a real project folder, then add a provider key in **Sett
 
 - **Build and Plan modes.** Build can edit files and run commands; Plan is read-only investigation.
 - **Live models and reasoning.** Model lists come from each provider; the models.dev catalog is only a fallback. Thinking is the provider's job: an effort control appears only when the selected model advertises effort levels or a token budget, and it is sent automatically.
-- **Themes.** Light, Dark, Night Owl, Claude Code and Flame, plus System, which follows the OS preference. Syntax highlighting follows the theme.
+- **Themes.** Light, Dark and System, which follows the OS preference. Syntax highlighting follows the theme. Plugin-contributed themes still register through the same API.
+- **Mascots.** Helium (default), Clawd (optional fan mascot), Sol and Byte, or Off. Choose one in Settings → Appearance. Clawd's attribution lives in `public/licenses/CLAWD.md`.
 - **Real tools.** Read/write/edit files, grep, list files, shell, git, web search, URL reading and a read-only SubAgent. Each user turn renders as one answer, with consecutive tool rounds collapsed into a single “Used N tools” group.
 - **Turn queue.** A prompt sent while a turn is streaming waits its turn and runs next, instead of splitting into a second reply.
 - **Local plugins.** Two plugin modes:
@@ -51,7 +52,7 @@ npm run typecheck
 
 `npm run dev` proxies `/api` to the daemon on port 4174. For a production-style run, use `npm run build` followed by `npm start`.
 
-Remote models need provider access from this machine. Local providers such as Ollama are keyless but must already be running; MaxCode reports an actionable error when they are not.
+Remote models need provider access from this machine. Local providers such as Ollama are keyless but must already be running; OpenSol reports an actionable error when they are not.
 
 OpenCode free-tier models only work inside OpenCode itself, so they are hidden here. Paid OpenCode models work with an API key. Deploys require the matching CLI (`wrangler`, `netlify` or `vercel`) or `npx`, plus credentials in **Settings → Deploy**.
 
@@ -61,7 +62,7 @@ OpenCode free-tier models only work inside OpenCode itself, so they are hidden h
 - `secrets.enc` and `master.key` are created with mode `600`.
 - All API routes require the local session cookie and a CSRF header; Host and Origin are checked.
 - The daemon rejects code execution outside the selected workspace except for an explicit, existing deploy folder.
-- No telemetry or DevSoft-hosted proxy. Provider requests go directly from the daemon to the provider you configured.
+- No telemetry or OpenSoft-hosted proxy. Provider requests go directly from the daemon to the provider you configured.
 
 ## Stack
 

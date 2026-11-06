@@ -219,6 +219,8 @@ export async function writeWorkspaceFile(input, content, { create = true } = {})
   const temp = `${absolute}.${process.pid}.maxcode.tmp`
   await writeFile(temp, content, 'utf8')
   try {
+    // Keep the original permissions (e.g. the executable bit) across the atomic swap.
+    if (existing) await chmod(temp, existing.mode & 0o777).catch(() => undefined)
     await rename(temp, absolute)
   } catch (error) {
     await rm(temp, { force: true }).catch(() => undefined)
@@ -256,7 +258,7 @@ export async function editWorkspaceFile(input, oldText, newText, { replaceAll = 
   }
   const next = replaceAll
     ? file.content.split(oldText).join(newText)
-    : file.content.replace(oldText, newText)
+    : file.content.replace(oldText, () => newText)
   const written = await writeWorkspaceFile(input, next)
   return { ...written, replacements: replaceAll ? occurrences : 1 }
 }
@@ -630,15 +632,16 @@ export async function gitSummary() {
 }
 
 function decodeEntities(text) {
+  // `&amp;` must be decoded last, otherwise "&amp;lt;" is decoded twice into "<".
   return text
     .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&#x27;/g, "'")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&amp;/g, '&')
 }
 
 function stripHtml(html) {
@@ -801,15 +804,29 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
   } catch {
     throw new HttpError(400, 'That URL is not valid.', 'bad_url')
   }
-  await assertPublicUrl(url)
-  const response = await fetch(url, {
-    redirect: 'follow',
-    headers: {
-      Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5',
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 MaxCode/1.0',
-    },
-    signal: AbortSignal.timeout(25_000),
-  })
+  // Follow redirects by hand so every hop is checked against the private-network
+  // rules; `redirect: 'follow'` would let a public page bounce into localhost/LAN.
+  const signal = AbortSignal.timeout(25_000)
+  let response
+  for (let hop = 0; ; hop += 1) {
+    await assertPublicUrl(url)
+    response = await fetch(url, {
+      redirect: 'manual',
+      headers: {
+        Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 MaxCode/1.0',
+      },
+      signal,
+    })
+    if (response.status < 300 || response.status >= 400) break
+    const location = response.headers.get('location')
+    if (!location || hop >= 5) throw new HttpError(502, 'Too many redirects.', 'fetch_failed')
+    try {
+      url = new URL(location, url)
+    } catch {
+      throw new HttpError(502, 'The page redirected to an invalid URL.', 'fetch_failed')
+    }
+  }
   if (!response.ok) {
     throw new HttpError(502, `That page returned HTTP ${response.status}.`, 'fetch_failed')
   }

@@ -247,13 +247,13 @@ if (typeof window !== 'undefined') {
 export function exportChats() {
   const data = useChats.getState().sessions
   const blob = new Blob(
-    [JSON.stringify({ app: 'MaxCode', exportedAt: new Date().toISOString(), sessions: data }, null, 2)],
+    [JSON.stringify({ app: 'OpenSol', exportedAt: new Date().toISOString(), sessions: data }, null, 2)],
     { type: 'application/json' },
   )
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `maxcode-history-${new Date().toISOString().slice(0, 10)}.json`
+  anchor.download = `opensol-history-${new Date().toISOString().slice(0, 10)}.json`
   anchor.click()
   URL.revokeObjectURL(url)
 }
@@ -261,7 +261,7 @@ export function exportChats() {
 export function importChats(file: File): Promise<number> {
   return file.text().then((text) => {
     const parsed = JSON.parse(text) as { sessions?: unknown[] }
-    if (!Array.isArray(parsed.sessions)) throw new Error('This file does not contain a MaxCode history.')
+    if (!Array.isArray(parsed.sessions)) throw new Error('This file does not contain a OpenSol history.')
     const sessions = parsed.sessions.filter(isSession).map(normalizeSession)
     if (sessions.length === 0) throw new Error('No valid conversations were found in this file.')
     const existing = new Set(useChats.getState().sessions.map((session) => session.id))

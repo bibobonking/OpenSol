@@ -3,3 +3,5 @@ node_modules
 docs
 .claude
 Guide-Make-Plugin.md
+dsh-claude-style/
+*.tsbuildinfo
