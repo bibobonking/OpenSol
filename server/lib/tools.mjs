@@ -99,7 +99,7 @@ export async function resolveWorkspacePath(input, { allowRoot = true } = {}) {
     throw new HttpError(403, 'That path is outside the open workspace.', 'outside_workspace')
   }
   if (/^(.*\/)?\.git(\/|$)/.test(rel)) {
-    throw new HttpError(403, 'MaxCode does not edit the .git directory.', 'git_protected')
+    throw new HttpError(403, 'OpenSol does not edit the .git directory.', 'git_protected')
   }
   const absolute = await insideRoot(root, candidate)
   return { root, absolute, relative: rel || '.' }
@@ -210,7 +210,7 @@ export async function writeWorkspaceFile(input, content, { create = true } = {})
   const { root, absolute, relative } = await resolveWorkspacePath(input, { allowRoot: false })
   if (typeof content !== 'string') throw new HttpError(400, 'File content must be text.', 'bad_content')
   if (Buffer.byteLength(content, 'utf8') > MAX_WRITE) {
-    throw new HttpError(413, 'That file is too large to write from MaxCode.', 'file_too_large')
+    throw new HttpError(413, 'That file is too large to write from OpenSol.', 'file_too_large')
   }
   const existing = await stat(absolute).catch(() => null)
   if (!existing && !create) throw new HttpError(404, `File not found: ${relative}`, 'not_found')
@@ -671,7 +671,7 @@ async function duckduckgo(query, signal) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 MaxCode/1.0',
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 OpenSol/1.0',
     },
     body: new URLSearchParams({ q: query }).toString(),
     signal,
@@ -814,7 +814,7 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
       redirect: 'manual',
       headers: {
         Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5',
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 MaxCode/1.0',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 OpenSol/1.0',
       },
       signal,
     })
@@ -832,7 +832,7 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
   }
   const type = response.headers.get('content-type') ?? ''
   if (!/text\/|json|xml|javascript/i.test(type)) {
-    throw new HttpError(415, `MaxCode cannot read ${type || 'that content type'}.`, 'unsupported_type')
+    throw new HttpError(415, `OpenSol cannot read ${type || 'that content type'}.`, 'unsupported_type')
   }
   const raw = (await response.text()).slice(0, maxBytes)
   const text = /html/i.test(type) ? stripHtml(raw) : raw

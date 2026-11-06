@@ -112,7 +112,7 @@ function allowedOrigins() {
 function guardRequest(req) {
   const hostHeader = String(req.headers.host ?? '').toLowerCase()
   if (!hostHeader || !allowedHosts().has(hostHeader)) {
-    throw new HttpError(403, 'MaxCode only answers requests addressed to localhost.', 'bad_host')
+    throw new HttpError(403, 'OpenSol only answers requests addressed to localhost.', 'bad_host')
   }
   const origin = String(req.headers.origin ?? '')
   if (origin && !allowedOrigins().has(origin.toLowerCase())) {
@@ -146,7 +146,7 @@ function sessionFrom(req) {
 
 function requireSession(req) {
   const session = sessionFrom(req)
-  if (!session) throw new HttpError(401, 'Open MaxCode from its local address to start a session.', 'no_session')
+  if (!session) throw new HttpError(401, 'Open OpenSol from its local address to start a session.', 'no_session')
   return session
 }
 
@@ -932,7 +932,7 @@ export async function stopDaemon() {
   const status = await daemonStatus()
   if (!status.running) {
     await rm(path.join(DATA_DIR, 'daemon.json'), { force: true })
-    return { stopped: false, reason: 'MaxCode is not running.' }
+    return { stopped: false, reason: 'OpenSol is not running.' }
   }
   try {
     process.kill(status.info.pid, 'SIGTERM')

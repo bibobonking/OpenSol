@@ -28,7 +28,7 @@ async function readIndex() {
       : []
   } catch (error) {
     if (error?.code === 'ENOENT') return []
-    if (error instanceof SyntaxError) throw new Error('MaxCode plugin index is damaged.')
+    if (error instanceof SyntaxError) throw new Error('OpenSol plugin index is damaged.')
     throw error
   }
 }
