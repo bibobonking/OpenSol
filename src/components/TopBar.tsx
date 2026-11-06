@@ -46,7 +46,7 @@ export function TopBar({
   const workspace = useWorkspace((state) => state.info)
   const activeModel = useActiveModel()
 
-  // Go through the theme registry so Night Owl, Claude Code, Flame and plugin themes count as dark.
+  // Go through the theme registry so plugin themes count as dark too.
   const isDark = themeIsDark(
     settings.theme,
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
