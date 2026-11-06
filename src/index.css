@@ -2,120 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Serif';
+  src: url('/fonts/NotoSerifVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMonoVariable.ttf') format('truetype-variations');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMonoItalicVariable.ttf') format('truetype-variations');
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
+
 @layer base {
-  /* Light — neutral black and white. */
+  /* Light - flat white canvas, soft gray sidebar. */
   :root,
   [data-theme='light'] {
-    --canvas: 252 252 252;
+    --canvas: 250 250 250;
     --panel: 255 255 255;
-    --raised: 244 244 245;
-    --line: 226 226 229;
-    --ink: 17 17 19;
-    --muted: 97 97 104;
-    --faint: 150 150 158;
-    --accent: 24 24 27;
-    --accent-soft: 240 240 242;
+    --raised: 244 242 243;
+    --line: 233 233 233;
+    --ink: 22 22 22;
+    --muted: 112 104 106;
+    --faint: 145 136 138;
+    --accent: 217 119 87;
+    --accent-soft: 246 222 215;
     --on-accent: 255 255 255;
-    --success: 21 122 72;
-    --warning: 158 96 12;
-    --danger: 190 44 44;
-    --syn-keyword: 130 53 178;
-    --syn-string: 22 118 74;
-    --syn-number: 150 84 18;
-    --syn-title: 34 84 173;
-    --syn-attr: 12 116 132;
+    --success: 61 117 80;
+    --warning: 164 98 29;
+    --danger: 179 56 44;
+    --syn-keyword: 148 51 51;
+    --syn-string: 61 117 80;
+    --syn-number: 164 98 29;
+    --syn-title: 24 79 149;
+    --syn-attr: 42 111 120;
+    --chat-font-size: 15px;
     color-scheme: light;
   }
 
-  /* Dark — true near-black, legible, neutral. */
+  /* Dark - near-black canvas, low glare. */
   [data-theme='dark'] {
-    --canvas: 9 9 11;
-    --panel: 15 15 18;
-    --raised: 25 25 30;
-    --line: 42 42 49;
-    --ink: 240 240 244;
-    --muted: 161 161 172;
-    --faint: 116 116 128;
-    --accent: 245 245 248;
-    --accent-soft: 38 38 45;
-    --on-accent: 12 12 14;
-    --success: 106 214 156;
-    --warning: 238 191 108;
-    --danger: 246 138 132;
-    --syn-keyword: 198 146 245;
-    --syn-string: 138 220 172;
-    --syn-number: 235 189 124;
-    --syn-title: 142 186 250;
-    --syn-attr: 126 216 226;
-    color-scheme: dark;
-  }
-
-  /* Night Owl */
-  [data-theme='night-owl'] {
-    --canvas: 1 22 39;
-    --panel: 1 27 46;
-    --raised: 13 43 67;
-    --line: 26 62 90;
-    --ink: 214 222 235;
-    --muted: 141 168 197;
-    --faint: 99 125 156;
-    --accent: 130 170 255;
-    --accent-soft: 21 58 87;
-    --on-accent: 1 22 39;
-    --success: 34 210 156;
-    --warning: 236 196 141;
-    --danger: 239 83 80;
-    --syn-keyword: 197 147 249;
-    --syn-string: 144 209 148;
-    --syn-number: 247 190 116;
-    --syn-title: 130 170 255;
-    --syn-attr: 33 193 220;
-    color-scheme: dark;
-  }
-
-  /* Claude Code */
-  [data-theme='claude-code'] {
-    --canvas: 38 38 36;
-    --panel: 42 42 40;
-    --raised: 51 51 48;
-    --line: 66 66 62;
-    --ink: 231 229 224;
-    --muted: 175 171 162;
-    --faint: 133 129 121;
+    --canvas: 31 31 31;
+    --panel: 25 25 25;
+    --raised: 40 40 40;
+    --line: 51 51 51;
+    --ink: 253 253 253;
+    --muted: 190 182 184;
+    --faint: 156 147 149;
     --accent: 217 119 87;
-    --accent-soft: 64 47 39;
-    --on-accent: 28 22 18;
-    --success: 143 191 140;
-    --warning: 222 178 112;
-    --danger: 224 122 112;
-    --syn-keyword: 213 145 122;
-    --syn-string: 143 187 137;
-    --syn-number: 221 176 116;
-    --syn-title: 158 184 222;
-    --syn-attr: 135 189 191;
-    color-scheme: dark;
-  }
-
-  /* Flame */
-  [data-theme='flame'] {
-    --canvas: 19 13 12;
-    --panel: 26 18 16;
-    --raised: 39 26 23;
-    --line: 62 38 33;
-    --ink: 245 232 226;
-    --muted: 186 156 146;
-    --faint: 133 105 96;
-    --accent: 255 122 48;
-    --accent-soft: 60 32 20;
-    --on-accent: 26 12 6;
-    --success: 146 206 138;
-    --warning: 246 196 106;
-    --danger: 255 106 92;
-    --syn-keyword: 250 130 84;
-    --syn-string: 170 210 138;
-    --syn-number: 250 194 108;
-    --syn-title: 250 168 128;
-    --syn-attr: 168 200 224;
+    --accent-soft: 72 38 27;
+    --on-accent: 251 251 251;
+    --success: 140 191 150;
+    --warning: 226 164 95;
+    --danger: 240 138 128;
+    --syn-keyword: 232 160 138;
+    --syn-string: 140 191 150;
+    --syn-number: 226 164 95;
+    --syn-title: 138 180 248;
+    --syn-attr: 127 208 216;
+    --chat-font-size: 15px;
     color-scheme: dark;
   }
 
@@ -130,7 +95,7 @@
   }
 
   body {
-    @apply bg-canvas font-sans text-ink antialiased;
+    @apply bg-panel font-sans text-ink antialiased;
     font-feature-settings: 'ss01' 1, 'cv05' 1;
     text-rendering: optimizeLegibility;
     overscroll-behavior: none;
@@ -164,7 +129,7 @@
   }
 
   .chip {
-    @apply inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-panel px-3 text-[12.5px] font-medium text-muted transition-colors duration-150 hover:border-faint/50 hover:text-ink;
+    @apply inline-flex h-8 items-center gap-1.5 rounded-full border border-line/80 bg-transparent px-3 text-[12.5px] font-medium text-muted transition duration-150 hover:bg-raised/60 hover:text-ink active:scale-[0.98];
   }
 
   .chip-active {
@@ -176,22 +141,57 @@
   }
 
   .eyebrow {
-    @apply text-[9.5px] font-medium uppercase tracking-[0.2em] text-faint;
+    @apply text-[10.5px] font-medium uppercase tracking-[0.16em] text-faint;
   }
 
   .sidebar-item {
-    @apply flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[12.5px] text-muted transition-colors duration-150 hover:bg-raised hover:text-ink;
+    @apply flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13.5px] text-ink/80 transition-colors duration-150 hover:bg-raised/70 hover:text-ink;
   }
 
   .sidebar-item-active {
-    @apply bg-raised font-medium text-ink hover:bg-raised;
+    @apply bg-raised text-ink hover:bg-raised;
+  }
+
+  .nav-item {
+    @apply flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[14px] text-ink transition-colors duration-150 hover:bg-raised/70;
+  }
+
+  /* A reading surface slightly lighter than the page: composer, popovers. */
+  .surface-lift {
+    background: color-mix(in srgb, rgb(var(--panel)) 45%, #fff);
+  }
+
+  .dark .surface-lift {
+    background: color-mix(in srgb, rgb(var(--panel)) 94%, #fff);
+  }
+
+  .chat-text {
+    font-size: var(--chat-font-size, 15px);
+  }
+
+  .settings-row {
+    @apply flex flex-col gap-2 border-b border-line py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6;
+  }
+
+  .settings-label {
+    @apply text-[13.5px] font-medium text-ink;
+  }
+
+  .settings-hint {
+    @apply mt-0.5 text-[11.5px] leading-relaxed text-muted;
+  }
+
+  .settings-select {
+    @apply h-9 shrink-0 rounded-lg border border-line bg-panel px-2.5 text-[12.5px] text-ink outline-none transition-colors focus:border-accent/50;
   }
 }
 
 /* Markdown */
 
 .md {
-  @apply text-[15px] leading-[1.72] text-ink;
+  @apply font-serif leading-[1.7] text-ink;
+  font-size: calc(var(--chat-font-size, 15px) * 1.1);
+  font-feature-settings: 'kern' 1, 'liga' 1;
   word-break: break-word;
 }
 
@@ -218,8 +218,7 @@
 
 .md h1,
 .md h2 {
-  font-family: 'Newsreader', 'Iowan Old Style', Georgia, serif;
-  font-weight: 600;
+  @apply font-medium;
 }
 
 .md h1 {
@@ -231,13 +230,13 @@
 }
 
 .md h3 {
-  @apply font-semibold;
-  font-size: 1.02em;
+  @apply font-medium;
+  font-size: 1.08em;
 }
 
 .md h4 {
-  @apply font-semibold;
-  font-size: 0.96em;
+  @apply font-medium;
+  font-size: 1em;
 }
 
 .md ul,
@@ -315,7 +314,7 @@
 }
 
 .md th {
-  @apply bg-raised font-medium;
+  @apply bg-raised/70 font-medium;
 }
 
 .md input[type='checkbox'] {
@@ -331,11 +330,11 @@
 
 .code-shell {
   @apply my-3 overflow-hidden rounded-xl border border-line;
-  background: rgb(var(--panel));
+  background: rgb(var(--canvas));
 }
 
 .code-head {
-  @apply flex h-9 items-center justify-between border-b border-line bg-raised/70 px-3;
+  @apply flex h-9 items-center justify-between border-b border-line/70 bg-raised/40 px-3;
 }
 
 .code-lang {
@@ -440,17 +439,55 @@
 /* Utilities */
 
 .hero-wash {
-  background:
-    radial-gradient(115% 78% at 50% -6%, rgb(var(--accent-soft) / 0.9), transparent 58%),
-    radial-gradient(70% 52% at 88% 8%, rgb(var(--accent) / 0.08), transparent 74%),
-    radial-gradient(60% 45% at 6% 18%, rgb(var(--raised) / 0.6), transparent 76%);
+  background: radial-gradient(70% 46% at 50% -10%, rgb(var(--accent-soft) / 0.4), transparent 66%);
+}
+
+/* Ambient texture so empty states read as a room, not a void. */
+
+.bg-dots {
+  background-image: radial-gradient(rgb(var(--faint) / 0.22) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(130% 90% at 50% -5%, #000 24%, transparent 76%);
+  mask-image: radial-gradient(130% 90% at 50% -5%, #000 24%, transparent 76%);
+}
+
+.ambient-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(52px);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.card-lift {
+  transition:
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s ease;
+}
+
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px -26px rgba(30, 30, 26, 0.35);
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--accent) / 0.16);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgb(var(--accent) / 0);
+  }
+}
+
+.composer-glow {
+  animation: glow-pulse 1.9s ease-out infinite;
 }
 
 .composer-shadow {
   box-shadow:
-    0 1px 1px rgba(0, 0, 0, 0.035),
-    0 18px 44px -20px rgba(0, 0, 0, 0.18),
-    0 0 0 1px rgba(0, 0, 0, 0.025);
+    0 1px 2px rgba(40, 32, 20, 0.04),
+    0 12px 32px -16px rgba(40, 32, 20, 0.16);
 }
 
 .modal-panel {
@@ -468,10 +505,11 @@
   }
 }
 
-[data-theme='dark'] .composer-shadow,
-[data-theme='night-owl'] .composer-shadow,
-[data-theme='claude-code'] .composer-shadow,
-[data-theme='flame'] .composer-shadow {
+[data-theme='dark'] .card-lift:hover {
+  box-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.65);
+}
+
+[data-theme='dark'] .composer-shadow {
   box-shadow:
     0 1px 1px rgba(0, 0, 0, 0.34),
     0 20px 52px -20px rgba(0, 0, 0, 0.7),

@@ -1,4 +1,4 @@
-export type BuiltinThemeId = 'light' | 'dark' | 'system' | 'night-owl' | 'claude-code' | 'flame'
+export type BuiltinThemeId = 'light' | 'dark' | 'system'
 
 /** A built-in theme id, or a Safe plugin's `plugin-<plugin>:<theme>` id. */
 export type ThemeId = BuiltinThemeId | (string & {})
@@ -15,11 +15,9 @@ export interface ThemeMeta {
 export const THEMES: ThemeMeta[] = [
   { id: 'light', label: 'Light', dark: false },
   { id: 'dark', label: 'Dark', dark: true },
-  { id: 'night-owl', label: 'Night Owl', dark: true },
-  { id: 'claude-code', label: 'Claude Code', dark: true },
-  { id: 'flame', label: 'Flame', dark: true },
 ]
 
+const RETIRED = new Set(['night-owl', 'claude-code', 'flame'])
 const SLUG = /^[a-z0-9][a-z0-9:_-]{0,79}$/
 const registry = new Map<string, ThemeMeta>(THEMES.map((theme) => [theme.id, theme]))
 
@@ -38,8 +36,9 @@ export function isThemeId(value: unknown): value is string {
 }
 
 export function resolveTheme(theme: ThemeId, prefersDark: boolean): string {
-  if (theme === 'system') return prefersDark ? 'dark' : 'light'
-  return isThemeId(theme) ? theme : 'light'
+  const normalized = normalizeTheme(theme)
+  if (normalized === 'system') return prefersDark ? 'dark' : 'light'
+  return normalized
 }
 
 export function themeIsDark(theme: ThemeId, prefersDark: boolean): boolean {
@@ -48,5 +47,6 @@ export function themeIsDark(theme: ThemeId, prefersDark: boolean): boolean {
 
 export function normalizeTheme(value: unknown): ThemeId {
   if (value === 'system') return 'system'
+  if (typeof value === 'string' && RETIRED.has(value)) return 'system'
   return isThemeId(value) ? value : 'system'
 }
