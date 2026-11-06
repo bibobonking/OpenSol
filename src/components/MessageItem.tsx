@@ -1,39 +1,126 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  Pencil,
   AlertCircle,
   Brain,
   Check,
   ChevronDown,
   Copy,
   FileText,
-  LoaderCircle,
   RefreshCw,
   Settings2,
   Square,
+  Undo2,
 } from 'lucide-react'
 import type { AssistantMessage, ToolMessage, UserMessage } from '../types'
 import type { ConversationTurn } from '../lib/conversation'
 import { useUi } from '../store/ui'
 import { useSettings } from '../store/settings'
 import { useModelCatalog } from '../store/models'
-import { regenerateLastTurn } from '../agent'
+import { regenerateLastTurn, runAgent } from '../agent'
+import { restoreCheckpoint } from '../lib/daemon'
+import { useWorkspace } from '../store/workspace'
+import { createId, useChats } from '../store/chats'
 import { toolLabel } from '../agent/tools'
 import { formatBytes, cn } from '../lib/utils'
 import { Markdown } from './Markdown'
 import { ToolCallCard } from './ToolCallCard'
 import { LogoMark } from './Logo'
-import { Mascot } from './Mascot'
+import { Helium } from './Helium'
 
 function formatTokens(value?: number) {
   if (!value) return ''
   return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value)
 }
 
-function UserBubble({ message }: { message: UserMessage }) {
+function UserBubble({
+  message,
+  sessionId,
+  canEdit,
+}: {
+  message: UserMessage
+  sessionId: string
+  canEdit: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(message.content)
+
+  const resend = () => {
+    const text = draft.trim()
+    if (!text) return
+    const session = useChats.getState().sessions.find((item) => item.id === sessionId)
+    const index = session?.messages.findIndex((item) => item.id === message.id) ?? -1
+    if (!session || index < 0) return
+    const id = createId('msg')
+    // Everything after the edited message belonged to the old answer, so it is dropped.
+    useChats.getState().updateSession(sessionId, { messages: session.messages.slice(0, index) })
+    useChats.getState().addMessage(sessionId, { ...message, id, content: text, createdAt: Date.now() })
+    setEditing(false)
+    runAgent(sessionId, id)
+  }
+
   const images = (message.attachments ?? []).filter((attachment) => attachment.kind === 'image')
   const files = (message.attachments ?? []).filter((attachment) => attachment.kind === 'text')
+  if (editing) {
+    return (
+      <div className="flex justify-end">
+        <div className="w-full max-w-[88%] rounded-[22px] border border-accent/30 bg-raised/60 p-2.5 sm:max-w-[82%]">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault()
+                resend()
+              }
+              if (event.key === 'Escape') setEditing(false)
+            }}
+            autoFocus
+            rows={Math.min(10, Math.max(2, draft.split('\n').length))}
+            className="chat-text block w-full resize-none bg-transparent px-2 py-1 leading-[1.65] text-ink outline-none"
+            aria-label="Edit message"
+          />
+          <div className="mt-1 flex items-center justify-between gap-2 px-1">
+            <p className="text-[11.5px] text-faint">Sending replaces the reply below.</p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="h-8 rounded-full px-3 text-[12.5px] text-muted transition-colors hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={resend}
+                disabled={!draft.trim()}
+                className="h-8 rounded-full bg-accent px-3.5 text-[12.5px] font-medium text-on-accent transition hover:brightness-110 disabled:opacity-40"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex justify-end">
+    <div className="group/user flex items-start justify-end gap-1.5">
+      {canEdit && message.content && (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(message.content)
+            setEditing(true)
+          }}
+          className="mt-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-faint opacity-0 transition hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover/user:opacity-100"
+          title="Edit and resend"
+          aria-label="Edit and resend message"
+        >
+          <Pencil size={14} strokeWidth={1.7} />
+        </button>
+      )}
       <div className="max-w-[88%] sm:max-w-[82%]">
         {images.length > 0 && (
           <div className={cn('mb-2 grid gap-2', images.length > 1 ? 'grid-cols-2' : 'grid-cols-1')}>
@@ -47,7 +134,7 @@ function UserBubble({ message }: { message: UserMessage }) {
             ))}
           </div>
         )}
-        <div className="rounded-[18px] bg-raised px-3.5 py-2.5">
+        <div className="rounded-[22px] bg-raised/80 px-4 py-3">
           {files.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {files.map((file) => (
@@ -71,6 +158,70 @@ function UserBubble({ message }: { message: UserMessage }) {
   )
 }
 
+const FILE_EDIT_TOOLS = new Set(['write_file', 'rewrite_file', 'edit_file'])
+
+function changedFiles(tools: ToolMessage[]): string[] {
+  const seen = new Set<string>()
+  for (const tool of tools) {
+    if (tool.status !== 'done' || !FILE_EDIT_TOOLS.has(tool.call.name)) continue
+    const path = tool.call.args.path
+    if (typeof path === 'string' && path) seen.add(path)
+  }
+  return [...seen]
+}
+
+/** Lets the person roll back every file the agent wrote or edited during one turn. */
+function UndoBar({ turnId, files }: { turnId: string; files: string[] }) {
+  const askConfirm = useUi((state) => state.askConfirm)
+  const notify = useUi((state) => state.notify)
+  const [state, setState] = useState<'idle' | 'working' | 'undone'>('idle')
+  const shown = files.slice(0, 2).join(', ')
+  const rest = files.length - 2
+
+  const undo = async () => {
+    const confirmed = await askConfirm({
+      title: 'Undo these file changes?',
+      body: `${files.length === 1 ? 'This file goes' : `These ${files.length} files go`} back to how ${files.length === 1 ? 'it was' : 'they were'} before this answer. Changes made through shell commands are not affected.`,
+      confirmLabel: 'Undo changes',
+    })
+    if (!confirmed) return
+    setState('working')
+    try {
+      const result = await restoreCheckpoint(turnId)
+      const parts = [
+        result.restored.length ? `restored ${result.restored.length}` : '',
+        result.removed.length ? `removed ${result.removed.length}` : '',
+        result.skipped.length ? `${result.skipped.length} too large to restore` : '',
+      ].filter(Boolean)
+      notify(`Undone: ${parts.join(', ') || 'nothing to change'}.`, 'success')
+      setState('undone')
+      await useWorkspace.getState().refresh().catch(() => undefined)
+    } catch (error) {
+      setState('idle')
+      notify(error instanceof Error ? error.message : 'Could not undo those changes.', 'error')
+    }
+  }
+
+  return (
+    <div className="mt-1 flex items-center gap-2 rounded-xl border border-line/70 px-3 py-2 text-[12.5px] text-muted">
+      <span className="min-w-0 flex-1 truncate">
+        {state === 'undone' ? 'Changes undone' : `Changed ${shown}${rest > 0 ? ` and ${rest} more` : ''}`}
+      </span>
+      {state !== 'undone' && (
+        <button
+          type="button"
+          onClick={() => void undo()}
+          disabled={state === 'working'}
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 font-medium text-ink transition-colors hover:bg-raised disabled:opacity-50"
+        >
+          <Undo2 size={13} strokeWidth={1.8} />
+          Undo
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function TaskCompletedBox({
   tools,
   intermediateMessages = [],
@@ -84,7 +235,6 @@ export function TaskCompletedBox({
   const autoOpened = useRef(false)
   const autoCollapse = useSettings((state) => state.autoCollapseWork)
   const detailed = useSettings((state) => state.workDetail === 'detailed')
-  const mascot = useSettings((state) => state.mascot)
 
   const awaiting = tools.some((tool) => tool.status === 'awaiting')
   const active = streaming || tools.some((tool) => tool.status === 'running')
@@ -114,7 +264,7 @@ export function TaskCompletedBox({
   ].sort((a, b) => a.time - b.time)
 
   return (
-    <div className="my-1.5 overflow-hidden rounded-xl border border-line/80 bg-transparent">
+    <div className="my-1.5 overflow-hidden rounded-2xl border border-line/80 bg-transparent">
       <button
         type="button"
         onClick={() => {
@@ -125,13 +275,13 @@ export function TaskCompletedBox({
         aria-expanded={open}
       >
         {awaiting ? (
-          mascot === 'off' ? <AlertCircle size={20} className="text-warning" /> : <Mascot id={mascot} mood="alert" size={26} />
+          <Helium mood="alert" size={26} />
         ) : active ? (
-          mascot === 'off' ? <LoaderCircle size={20} className="animate-spin text-accent" /> : <Mascot id={mascot} mood="working" size={26} />
+          <Helium mood="working" size={26} />
         ) : failed > 0 ? (
-          mascot === 'off' ? <AlertCircle size={20} className="text-danger" /> : <Mascot id={mascot} mood="error" size={26} />
+          <Helium mood="error" size={26} />
         ) : (
-          mascot === 'off' ? <Check size={20} className="text-success" /> : <Mascot id={mascot} mood="happy" size={26} />
+          <Helium mood="happy" size={26} />
         )}
 
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
@@ -249,7 +399,7 @@ export function AssistantBlock({
         <div className="min-w-0">
           {showHeader && (
             <div className="flex items-center gap-2 text-[12px] font-semibold text-ink">
-              OpenSol
+              MaxCode
               {modelName && <span className="font-normal text-faint">{modelName}</span>}
             </div>
           )}
@@ -276,7 +426,7 @@ export function AssistantBlock({
             {showHeader && (
               <>
                 <LogoMark size={15} />
-                <span className="text-[12px] font-medium text-muted">OpenSol</span>
+                <span className="text-[12px] font-medium text-muted">MaxCode</span>
                 {modelName && <span className="truncate text-[11.5px] text-faint">{modelName}</span>}
               </>
             )}
@@ -290,7 +440,7 @@ export function AssistantBlock({
         )}
 
         {message.reasoning.trim() && (
-          <div className="mt-1 overflow-hidden rounded-lg border border-line/60">
+          <div className="mt-1 overflow-hidden rounded-xl border border-line/60">
             <button
               type="button"
               onClick={() => setReasoningOpen((value) => !value)}
@@ -336,7 +486,7 @@ export function AssistantBlock({
         )}
 
         {message.error && (
-          <div className="mt-3 rounded-lg border border-danger/25 bg-danger/[0.035] px-3.5 py-3">
+          <div className="mt-3 rounded-xl border border-danger/25 bg-danger/[0.045] px-3.5 py-3">
             <div className="flex items-start gap-2">
               <AlertCircle size={15} className="mt-0.5 shrink-0 text-danger" />
               <div className="min-w-0 flex-1">
@@ -435,7 +585,7 @@ export function TurnBlock({
   if (activeTurn && hasTools) {
     return (
       <div className="flex flex-col gap-2.5">
-        {turn.user && <UserBubble message={turn.user} />}
+        {turn.user && <UserBubble message={turn.user} sessionId={sessionId} canEdit={!streaming} />}
         {turn.segments.map((segment, index) =>
           segment.kind === 'tools' ? (
             <div key={`tools-${index}`} className="space-y-1.5">
@@ -463,7 +613,7 @@ export function TurnBlock({
     let seen = 0
     return (
       <div className="flex flex-col gap-2.5">
-        {turn.user && <UserBubble message={turn.user} />}
+        {turn.user && <UserBubble message={turn.user} sessionId={sessionId} canEdit={!streaming} />}
         {assistantMessages.map((message) => (
           <AssistantBlock
             key={message.id}
@@ -484,7 +634,7 @@ export function TurnBlock({
 
   return (
     <div className="flex flex-col gap-2.5">
-      {turn.user && <UserBubble message={turn.user} />}
+      {turn.user && <UserBubble message={turn.user} sessionId={sessionId} canEdit={!streaming} />}
 
       <TaskCompletedBox tools={allTools} intermediateMessages={intermediateAssistants} />
 
@@ -497,6 +647,10 @@ export function TurnBlock({
           isLastAssistant={finalAssistant.id === lastAssistantId}
           showHeader={true}
         />
+      )}
+
+      {turn.user && changedFiles(allTools).length > 0 && (
+        <UndoBar turnId={turn.user.id} files={changedFiles(allTools)} />
       )}
     </div>
   )

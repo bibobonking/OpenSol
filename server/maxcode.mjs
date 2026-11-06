@@ -11,7 +11,7 @@ const DAEMON = path.join(HERE, 'daemon.mjs')
 const LOG_FILE = path.join(DATA_DIR, 'daemon.log')
 const PID_FILE = path.join(DATA_DIR, 'daemon.json')
 
-const HELP = `OpenSol — local coding agent daemon
+const HELP = `MaxCode — local coding agent daemon
 
 Usage:
   maxcode start [--port=4174] [--open] [--foreground]
@@ -99,7 +99,7 @@ async function commandStart(args) {
   await ensureDataDir()
   const existing = await daemonStatus()
   if (existing.running) {
-    console.log(`OpenSol is already running at ${existing.info.url}`)
+    console.log(`MaxCode is already running at ${existing.info.url}`)
     if (flags.open) openerFor(existing.info.url)
     return
   }
@@ -123,12 +123,12 @@ async function commandStart(args) {
 
   const status = await waitForDaemon(child.pid)
   if (!status.running) {
-    console.error('OpenSol did not start. Recent log:')
+    console.error('MaxCode did not start. Recent log:')
     await tailLog(20)
     process.exitCode = 1
     return
   }
-  console.log(`OpenSol is running at ${status.info.url}`)
+  console.log(`MaxCode is running at ${status.info.url}`)
   console.log(`Data: ${DATA_DIR}`)
   console.log(`Log:  ${LOG_FILE}`)
   if (flags.open) openerFor(status.info.url)
@@ -137,10 +137,10 @@ async function commandStart(args) {
 async function commandStatus() {
   const status = await daemonStatus()
   if (!status.running) {
-    console.log('OpenSol is not running.')
+    console.log('MaxCode is not running.')
     return
   }
-  console.log(`OpenSol is running at ${status.info.url}`)
+  console.log(`MaxCode is running at ${status.info.url}`)
   console.log(`PID: ${status.info.pid}`)
   console.log(`Data: ${status.info.dataDir ?? DATA_DIR}`)
   console.log(`Dist ready: ${status.info.dist ? 'yes' : 'no'}`)
@@ -149,7 +149,7 @@ async function commandStatus() {
 async function commandOpen() {
   const status = await daemonStatus()
   if (!status.running) {
-    console.error('OpenSol is not running. Start it with: maxcode start')
+    console.error('MaxCode is not running. Start it with: maxcode start')
     process.exitCode = 1
     return
   }
@@ -160,10 +160,10 @@ async function commandOpen() {
 async function commandStop() {
   const result = await stopDaemon()
   if (!result.stopped) {
-    console.log(result.reason ?? 'OpenSol is not running.')
+    console.log(result.reason ?? 'MaxCode is not running.')
     return
   }
-  console.log(`Stopped OpenSol${result.pid ? ` (pid ${result.pid})` : ''}.`)
+  console.log(`Stopped MaxCode${result.pid ? ` (pid ${result.pid})` : ''}.`)
 }
 
 async function main() {

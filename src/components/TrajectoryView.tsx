@@ -97,7 +97,7 @@ export function TrajectoryView({ session }: { session: ChatSession }) {
                     <div className="min-w-0 flex-1 rounded-xl border border-line bg-panel px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-ink">
-                          OpenSol
+                          MaxCode
                           {message.model && (
                             <span className="truncate text-[10px] font-normal text-faint">{message.model}</span>
                           )}

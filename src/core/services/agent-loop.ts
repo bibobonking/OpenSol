@@ -11,6 +11,21 @@ import { createTurnQueue, lastUserMessageId } from '../../agent/queue'
 import type { StepContext, StepResult, TurnResult } from '../types'
 
 const MAX_ROUNDS = 16
+const MAX_RETRIES = 2
+/** Provider hiccups worth another try: overload, rate limits, 5xx and dropped connections. */
+const RETRYABLE = /\b(429|500|502|503|504|529)\b|rate.?limit|overloaded|temporar|timed out|could not be reached|lost the connection|failed to fetch|networkerror/i
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = () => {
+      window.clearTimeout(timer)
+      signal.removeEventListener('abort', finish)
+      resolve()
+    }
+    const timer = window.setTimeout(finish, ms)
+    signal.addEventListener('abort', finish, { once: true })
+  })
+}
 
 function isAbortError(error: unknown) {
   return (
@@ -46,9 +61,9 @@ export class AgentLoopService extends Service {
   }
 
   stopAllRuns(): void {
-    this.controllers.forEach((controller) => controller.abort())
-    this.controllers.forEach((_controller, sessionId) => {
-      this.queue.clear(sessionId)
+    this.queue.clearAll()
+    this.controllers.forEach((controller, sessionId) => {
+      controller.abort()
       void this.ctx.events.serial('agent/turn-stopping', sessionId)
     })
   }
@@ -96,14 +111,15 @@ export class AgentLoopService extends Service {
     let turnError: string | undefined
 
     try {
-      for (let round = 0; round < MAX_ROUNDS; round += 1) {
+      rounds: for (let round = 0; round < MAX_ROUNDS; round += 1) {
         totalRounds = round + 1
         if (controller.signal.aborted) break
         let current = this.ctx.sessions.current(sessionId)
         if (!current) break
 
         // Auto-compaction check before round 0
-        if (round === 0) {
+        // A prompt queued behind this turn would be dropped by the rewrite, so wait until it is the last one.
+        if (round === 0 && lastUserMessageId(current.messages) === userMessageId) {
           const compacted = await this.ctx.compaction.checkAutoCompact(sessionId)
           if (compacted) {
             // Compaction rewrites the whole transcript, so the original user message
@@ -164,42 +180,67 @@ export class AgentLoopService extends Service {
         await this.ctx.events.waterfall('agent/pre-step', stepContext, () => undefined)
 
         let result: AdapterResult
-        try {
-          result = await this.ctx.llm.stream({
-            settings,
-            model: findModel(settings.provider, activeModelId(settings)),
-            history,
-            system: this.ctx.systemPrompt.assemble(settings, mode),
-            mode,
-            signal: controller.signal,
-            handlers: {
-              onText: (delta) => {
-                streamedContent += delta
-                flush()
+        let attempt = 0
+        for (;;) {
+          try {
+            result = await this.ctx.llm.stream({
+              settings,
+              model: findModel(settings.provider, activeModelId(settings)),
+              history,
+              system: this.ctx.systemPrompt.assemble(settings, mode),
+              mode,
+              signal: controller.signal,
+              handlers: {
+                onText: (delta) => {
+                  streamedContent += delta
+                  flush()
+                },
+                onReasoning: (delta) => {
+                  streamedReasoning += delta
+                  flush()
+                },
+                onToolCalls: () => undefined,
+                onUsage: (value) => {
+                  usage = value
+                },
               },
-              onReasoning: (delta) => {
-                streamedReasoning += delta
-                flush()
-              },
-              onToolCalls: () => undefined,
-              onUsage: (value) => {
-                usage = value
-              },
-            },
-          })
-        } catch (error) {
-          if (flushTimer !== undefined) window.clearTimeout(flushTimer)
-          const stopped = isAbortError(error) || controller.signal.aborted
-          turnError = stopped ? undefined : describeRequestError(error, providerName)
-          this.ctx.sessions.updateMessage(sessionId, assistantId, {
-            content: streamedContent,
-            reasoning: streamedReasoning,
-            stopped,
-            durationMs: Date.now() - startedAt,
-            error: turnError,
-          })
-          await this.ctx.events.waterfall('agent/request-error', error, stepContext, () => undefined)
-          break
+            })
+            break
+          } catch (error) {
+            const stopped = isAbortError(error) || controller.signal.aborted
+            // Only retry when nothing reached the screen yet, so a retry never duplicates text.
+            const retryable =
+              !stopped &&
+              attempt < MAX_RETRIES &&
+              !streamedContent &&
+              !streamedReasoning &&
+              RETRYABLE.test(error instanceof Error ? error.message : '')
+            if (retryable) {
+              attempt += 1
+              window.dispatchEvent(
+                new CustomEvent('maxcode:notice', {
+                  detail: {
+                    message: `${providerName} is busy. Retrying (${attempt}/${MAX_RETRIES})…`,
+                    tone: 'info',
+                  },
+                }),
+              )
+              await sleep(1200 * attempt * attempt, controller.signal)
+              if (controller.signal.aborted) continue
+              continue
+            }
+            if (flushTimer !== undefined) window.clearTimeout(flushTimer)
+            turnError = stopped ? undefined : describeRequestError(error, providerName)
+            this.ctx.sessions.updateMessage(sessionId, assistantId, {
+              content: streamedContent,
+              reasoning: streamedReasoning,
+              stopped,
+              durationMs: Date.now() - startedAt,
+              error: turnError,
+            })
+            await this.ctx.events.waterfall('agent/request-error', error, stepContext, () => undefined)
+            break rounds
+          }
         }
 
         if (flushTimer !== undefined) window.clearTimeout(flushTimer)
@@ -284,6 +325,7 @@ export class AgentLoopService extends Service {
                     mode,
                     controller.signal,
                     call.id,
+                    userMessageId,
                   )
             const finalToolMessage: ToolMessage = {
               ...toolMessage,

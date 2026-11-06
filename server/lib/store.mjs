@@ -69,7 +69,7 @@ async function readJson(file, fallback) {
     if (error instanceof SyntaxError) {
       const backup = `${file}.broken-${Date.now()}`
       await rename(file, backup).catch(() => undefined)
-      throw new Error(`OpenSol data is damaged. The file was moved to ${backup}.`)
+      throw new Error(`MaxCode data is damaged. The file was moved to ${backup}.`)
     }
     throw error
   }
@@ -193,7 +193,7 @@ export async function loadSecrets() {
     return secretsCache
   } catch (error) {
     throw new Error(
-      `OpenSol could not decrypt its saved keys. Restore ${MASTER_FILE} or reset secrets from Settings → About. (${error instanceof Error ? error.message : 'unknown error'})`,
+      `MaxCode could not decrypt its saved keys. Restore ${MASTER_FILE} or reset secrets from Settings → About. (${error instanceof Error ? error.message : 'unknown error'})`,
     )
   }
 }

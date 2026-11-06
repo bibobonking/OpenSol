@@ -36,8 +36,8 @@ import { PERMISSION_MODES, permissionLabel, permissionMode, permissionTools } fr
 import { useClickOutside } from '../lib/hooks'
 import { cn, formatBytes, readFileAsDataUrl, readFileAsText } from '../lib/utils'
 import { ModelPicker } from './ModelPicker'
-import { Mascot } from './Mascot'
-import type { MascotMood } from '../lib/mascot'
+import { Helium } from './Helium'
+import type { HeliumMood } from '../lib/helium'
 
 const TEXT_EXTENSIONS = /\.(txt|md|markdown|ts|tsx|js|jsx|mjs|cjs|json|css|scss|html|vue|svelte|py|go|rs|rb|java|kt|cs|c|h|cpp|hpp|php|swift|sh|bash|zsh|yml|yaml|toml|ini|sql|csv|xml|gitignore|env)$/i
 const MAX_ATTACHMENTS = 6
@@ -73,8 +73,7 @@ export function Composer({
   placeholder = 'How can I help you today?',
   contextPct,
   contextTitle,
-  mascotMood,
-  surface = 'conversation',
+  heliumMood,
 }: {
   value: string
   onChange: (value: string) => void
@@ -87,8 +86,7 @@ export function Composer({
   placeholder?: string
   contextPct?: number
   contextTitle?: string
-  mascotMood?: MascotMood
-  surface?: 'home' | 'conversation'
+  heliumMood?: HeliumMood
 }) {
   const settings = useSettings()
   const update = useSettings((state) => state.update)
@@ -397,7 +395,7 @@ export function Composer({
           type="button"
           onClick={() => update({ webSearchEnabled: !settings.webSearchEnabled })}
           className={cn('chip h-7 gap-1.5 px-2.5 text-[11px]', settings.webSearchEnabled && 'chip-active')}
-          title="Allow OpenSol to search the web and read pages"
+          title="Allow MaxCode to search the web and read pages"
           aria-pressed={settings.webSearchEnabled}
         >
           <Globe2 size={12} />
@@ -445,17 +443,17 @@ export function Composer({
         }}
         onDrop={onDrop}
         className={cn(
-          'surface-lift composer-shadow relative rounded-[20px] border transition-all duration-200',
+          'surface-lift composer-shadow relative rounded-[26px] border transition-all duration-200',
           focused || dragging ? 'border-accent/35' : 'border-line',
           streaming && 'composer-glow border-accent/30',
           dragging && 'ring-4 ring-accent/10',
         )}
       >
         {focused && !dragging && (
-          <div className="pointer-events-none absolute inset-0 rounded-[20px] ring-4 ring-accent/[0.03]" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-0 rounded-[26px] ring-4 ring-accent/[0.03]" aria-hidden="true" />
         )}
 
-        <div className="relative px-4 pb-1 pt-3">
+        <div className="relative px-3.5 pb-1 pt-3">
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-1 pb-2">
               {attachments.map((attachment) =>
@@ -507,8 +505,8 @@ export function Composer({
             onBlur={() => setFocused(false)}
             placeholder={placeholder}
             rows={1}
-            aria-label="Message OpenSol"
-            className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-[1.6] text-ink outline-none placeholder:text-faint"
+            aria-label="Message MaxCode"
+            className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15.5px] leading-[1.6] text-ink outline-none placeholder:text-faint"
             style={{ minHeight: 52, maxHeight: 220 }}
           />
         </div>
@@ -521,7 +519,7 @@ export function Composer({
                 type="button"
                 onClick={() => setPermissionOpen((open) => !open)}
                 className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-muted transition-colors hover:bg-raised hover:text-ink"
-                title="Choose how much OpenSol can do without asking"
+                title="Choose how much MaxCode can do without asking"
                 aria-expanded={permissionOpen}
               >
                 <ShieldCheck size={13} className="text-faint" />
@@ -642,19 +640,18 @@ export function Composer({
         </div>
 
         {dragging && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-[20px] border-2 border-dashed border-accent/45 bg-panel/95">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-[26px] border-2 border-dashed border-accent/45 bg-panel/95">
             <Upload size={18} className="text-accent" />
             <p className="text-[12px] font-medium text-ink">Drop files to attach</p>
             <p className="text-[10.5px] text-faint">Images up to 5 MB · text up to 512 KB</p>
           </div>
         )}
 
-        {mascotMood && settings.mascot !== 'off' && (settings.mascotScope === 'all' || surface === 'home') && (
-          <Mascot
-            id={settings.mascot}
-            mood={mascotMood}
+        {heliumMood && (
+          <Helium
+            mood={heliumMood}
             size={64}
-            className="pointer-events-none absolute -top-[70px] right-2 z-10 hidden drop-shadow-sm sm:inline-flex"
+            className="pointer-events-none absolute -top-14 right-2 z-10 hidden drop-shadow-sm sm:inline-flex"
           />
         )}
       </div>

@@ -20,15 +20,15 @@ export default {
         danger: 'rgb(var(--danger) / <alpha-value>)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['"Noto Serif"', 'Georgia', 'serif'],
-        serif: ['"Noto Serif"', 'Georgia', 'serif'],
+        sans: ['"Instrument Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Newsreader', '"Iowan Old Style"', 'Georgia', 'serif'],
+        serif: ['Newsreader', '"Iowan Old Style"', 'Georgia', 'serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       boxShadow: {
-        composer: '0 1px 2px rgba(0, 0, 0, 0.03), 0 10px 28px -18px rgba(0, 0, 0, 0.14)',
-        float: '0 16px 48px -20px rgba(22, 22, 22, 0.18), 0 0 0 1px rgba(22, 22, 22, 0.04)',
-        pill: '0 1px 2px rgba(22, 22, 22, 0.05), 0 1px 1px rgba(22, 22, 22, 0.02)',
+        composer: '0 1px 2px rgba(40, 32, 20, 0.04), 0 14px 36px -18px rgba(40, 32, 20, 0.18)',
+        float: '0 22px 60px -24px rgba(58, 41, 28, 0.38), 0 0 0 1px rgba(74, 54, 38, 0.06)',
+        pill: '0 1px 2px rgba(74, 54, 38, 0.07), 0 1px 1px rgba(74, 54, 38, 0.025)',
       },
       borderRadius: {
         '4xl': '2rem',

@@ -91,9 +91,9 @@ const CAPABILITY_LABELS: Record<PluginCapability, string> = {
   'workspace.read': 'Read workspace files',
   'workspace.write': 'Create and overwrite workspace files',
   'workspace.edit': 'Edit workspace files in place',
-  'ui.commands': 'Add commands to OpenSol',
-  'ui.panels': 'Add panels to OpenSol',
-  'ui.themes': 'Add themes to OpenSol',
+  'ui.commands': 'Add commands to MaxCode',
+  'ui.panels': 'Add panels to MaxCode',
+  'ui.themes': 'Add themes to MaxCode',
   'network.request': 'Call the HTTPS domains it declared',
 }
 
@@ -152,7 +152,7 @@ export function PluginManager() {
     }
     const ok = await askConfirm({
       title: `Run ${plugin.manifest.name} outside the sandbox?`,
-      body: 'Safe plugins run as real JavaScript inside OpenSol. They can do anything this app can, so only mark plugins you wrote or have reviewed.',
+      body: 'Safe plugins run as real JavaScript inside MaxCode. They can do anything this app can, so only mark plugins you wrote or have reviewed.',
       confirmLabel: 'Mark as Safe',
       tone: 'danger',
     })
@@ -165,7 +165,7 @@ export function PluginManager() {
       <section className="rounded-xl border border-line bg-raised/20 p-3">
         <h3 className="text-[12px] font-medium text-ink">Install a local plugin</h3>
         <p className="mt-1 text-[10.5px] leading-relaxed text-faint">
-          OpenSol installs <code className="font-mono">.plugin.json</code> packages you pick from this machine. New plugins
+          MaxCode installs <code className="font-mono">.plugin.json</code> packages you pick from this machine. New plugins
           start sandboxed and disabled until you review them.
         </p>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -231,7 +231,7 @@ export function PluginManager() {
                       {plugin.safe ? <ShieldAlert size={13} className="mt-0.5 shrink-0 text-warning" /> : <ShieldCheck size={13} className="mt-0.5 shrink-0 text-faint" />}
                       <span>
                         {plugin.safe
-                          ? 'This plugin runs as real JavaScript in OpenSol with the permissions below. It is not sandboxed any more.'
+                          ? 'This plugin runs as real JavaScript in MaxCode with the permissions below. It is not sandboxed any more.'
                           : 'This plugin is sandboxed. Mark it Safe to run its code, or preview it first.'}
                       </span>
                     </div>
@@ -313,7 +313,7 @@ export function PluginManager() {
                         onClick={async () => {
                           const ok = await askConfirm({
                             title: `Uninstall ${plugin.manifest.name}?`,
-                            body: 'Its permissions, styles and commands are removed from OpenSol.',
+                            body: 'Its permissions, styles and commands are removed from MaxCode.',
                             confirmLabel: 'Uninstall',
                             tone: 'danger',
                           })

@@ -88,3 +88,24 @@ test('clear drops waiting turns but not the running one', async () => {
   assert.deepEqual(ran, ['first'])
   assert.equal(queue.isIdle(), true)
 })
+
+test('clearAll drops queued turns in every session but lets the running one finish', async () => {
+  const ran = []
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const queue = createTurnQueue(async (sessionId, id) => {
+    ran.push(`${sessionId}:${id}`)
+    if (id === 'a1' || id === 'b1') await gate
+  })
+  const running = queue.push('a', 'a1')
+  const queuedA = queue.push('a', 'a2')
+  const runningB = queue.push('b', 'b1')
+  const queuedB = queue.push('b', 'b2')
+  await Promise.resolve()
+  queue.clearAll()
+  release()
+  await Promise.all([running, runningB, queuedA, queuedB])
+  assert.deepEqual(ran.sort(), ['a:a1', 'b:b1'])
+})

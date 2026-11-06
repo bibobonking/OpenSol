@@ -62,22 +62,22 @@ function durationLabel(ms?: number) {
 function approvalCopy(name: ToolName) {
   switch (name) {
     case 'shell':
-      return 'OpenSol wants to run this command in the open workspace.'
+      return 'MaxCode wants to run this command in the open workspace.'
     case 'write_file':
-      return 'OpenSol wants to create or overwrite this file on disk.'
+      return 'MaxCode wants to create or overwrite this file on disk.'
     case 'edit_file':
     case 'rewrite_file':
-      return 'OpenSol wants to change this file on disk.'
+      return 'MaxCode wants to change this file on disk.'
     case 'git':
-      return 'OpenSol wants to change the Git state of this repository.'
+      return 'MaxCode wants to change the Git state of this repository.'
     case 'subagent':
-      return 'OpenSol wants to start a read-only subagent to investigate.'
+      return 'MaxCode wants to start a read-only subagent to investigate.'
     case 'web_search':
-      return 'OpenSol wants to search the web.'
+      return 'MaxCode wants to search the web.'
     case 'read_url':
-      return 'OpenSol wants to read this public page.'
+      return 'MaxCode wants to read this public page.'
     default:
-      return 'OpenSol wants to use this tool.'
+      return 'MaxCode wants to use this tool.'
   }
 }
 

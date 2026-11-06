@@ -33,6 +33,8 @@ export interface TurnQueue {
   push(sessionId: string, userMessageId: string): Promise<void>
   /** Drops turns that have not started yet; the running one keeps its abort signal. */
   clear(sessionId: string): void
+  /** Drops every turn that has not started yet, in every session. */
+  clearAll(): void
   isBusy(sessionId: string): boolean
   isIdle(): boolean
 }
@@ -57,6 +59,9 @@ export function createTurnQueue(run: (sessionId: string, userMessageId: string) 
       const lane = lanes.get(sessionId)
       if (!lane) return
       lanes.set(sessionId, { chain: lane.chain, token: {} })
+    },
+    clearAll() {
+      for (const [sessionId, lane] of lanes) lanes.set(sessionId, { chain: lane.chain, token: {} })
     },
     push(sessionId, userMessageId) {
       const lane = lanes.get(sessionId) ?? { chain: Promise.resolve(), token: {} }

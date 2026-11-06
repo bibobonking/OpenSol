@@ -24,9 +24,8 @@ import {
 } from '../lib/daemon'
 import { defaultEffort, normalizeEffort } from '../lib/reasoning'
 import { normalizeTheme } from '../lib/themes'
-import { normalizeMascot, normalizeMascotScope } from '../lib/mascot'
 
-export const DEFAULT_SYSTEM_PROMPT = `You are OpenSol, a senior web engineer and coding agent built by OpenSoft.
+export const DEFAULT_SYSTEM_PROMPT = `You are MaxCode, a senior web engineer and coding agent built by DevSoft.
 
 You work directly in the user's open folder through a local daemon. The shell, file, git, search and deploy tools are real. Never describe tool output you did not receive.
 
@@ -75,8 +74,6 @@ const DEFAULTS: AppSettings = {
   tools: DEFAULT_TOOLS,
   skills: BUILTIN_SKILLS,
   theme: 'system',
-  mascot: 'helium',
-  mascotScope: 'all',
   showTokenEstimate: true,
   mode: 'build',
   chatFontSize: 15,
@@ -188,8 +185,6 @@ function buildSettings(persisted?: Partial<AppSettings>): AppSettings {
     tools: mergeTools(saved.tools),
     skills: mergeSkills(saved.skills),
     theme: normalizeTheme(saved.theme),
-    mascot: normalizeMascot(saved.mascot),
-    mascotScope: normalizeMascotScope(saved.mascotScope),
     chatFontSize:
       typeof saved.chatFontSize === 'number' && Number.isFinite(saved.chatFontSize)
         ? Math.max(12, Math.min(20, Math.round(saved.chatFontSize)))
@@ -219,8 +214,6 @@ function persistedPatch(patch: Partial<AppSettings>): Partial<AppSettings> {
     'tools',
     'skills',
     'theme',
-    'mascot',
-    'mascotScope',
     'showTokenEstimate',
     'mode',
     'chatFontSize',

@@ -1,22 +1,36 @@
 import type { ReactNode } from 'react'
 import { HELIUM_LABELS, type HeliumMood } from '../lib/helium'
-import { PixelMascot, type Px } from './PixelMascot'
+import { cn } from '../lib/utils'
 
 /**
- * Helium is OpenSol's pixel balloon, drawn on the same 16x16 crisp grid as the
- * other mascots.
+ * Helium is MaxCode's little pixel balloon. Every mood is drawn on the same
+ * 16×16 crisp-edges grid so the sprite never blurs as it scales.
  */
-const PALETTE: Record<string, string> = {
-  outline: '#4a3527',
-  body: '#ffd9a8',
-  shade: '#e9b878',
-  highlight: '#fff3dc',
-  eye: '#2f241c',
+const PALETTE = {
+  outline: '#3b3a55',
+  body: '#b9c6ff',
+  shade: '#93a4ef',
+  highlight: '#e3e9ff',
+  eye: '#2a2938',
   white: '#ffffff',
-  cheek: '#ff9f8a',
-  spark: '#ffcf5c',
+  cheek: '#ffaec0',
+  spark: '#ffd166',
   ok: '#7ee2b8',
-  shadow: 'rgba(0,0,0,0.08)',
+} as const
+
+type Px = readonly [x: number, y: number, w: number, h: number, color: keyof typeof PALETTE]
+
+const MOOD_ANIMATION: Record<HeliumMood, string> = {
+  wave: 'animate-bob',
+  idle: 'animate-float-slow',
+  thinking: 'animate-float',
+  working: 'animate-bob-fast',
+  typing: 'animate-bob',
+  happy: 'animate-pop',
+  alert: 'animate-bounce',
+  error: 'animate-shake',
+  sleepy: 'animate-float-slow',
+  party: 'animate-pop',
 }
 
 const normalEyes: Px[] = [
@@ -90,7 +104,12 @@ function face(mood: HeliumMood): Px[] {
         [13, 11, 1, 1, 'cheek'],
       ]
     case 'thinking':
-      return [...halfEyes, [7, 8, 2, 1, 'eye'], [12, 2, 1, 3, 'eye'], [12, 6, 1, 1, 'eye']]
+      return [
+        ...halfEyes,
+        [7, 8, 2, 1, 'eye'],
+        [12, 2, 1, 3, 'eye'],
+        [12, 6, 1, 1, 'eye'],
+      ]
     case 'working':
       return [
         ...halfEyes,
@@ -123,27 +142,24 @@ function face(mood: HeliumMood): Px[] {
         [12, 6, 1, 1, 'spark'],
       ]
     case 'error':
-      return [...xEyes, [7, 9, 2, 1, 'eye'], [6, 8, 1, 1, 'eye'], [9, 8, 1, 1, 'eye'], [10, 7, 1, 1, 'cheek']]
+      return [
+        ...xEyes,
+        [7, 9, 2, 1, 'eye'],
+        [6, 8, 1, 1, 'eye'],
+        [9, 8, 1, 1, 'eye'],
+        [10, 7, 1, 1, 'cheek'],
+      ]
     case 'sleepy':
-      return [...closedEyes, [7, 8, 2, 1, 'eye'], [12, 2, 2, 1, 'shade'], [13, 3, 1, 1, 'shade'], [12, 4, 1, 1, 'shade']]
+      return [
+        ...closedEyes,
+        [7, 8, 2, 1, 'eye'],
+        [12, 2, 2, 1, 'shade'],
+        [13, 3, 1, 1, 'shade'],
+        [12, 4, 1, 1, 'shade'],
+      ]
     default:
       return [...normalEyes, [7, 8, 2, 1, 'eye']]
   }
-}
-
-function frame(mood: HeliumMood): Px[] {
-  return [
-    [5, 15, 6, 1, 'shadow'],
-    [3, 1, 10, 11, 'outline'],
-    [4, 2, 8, 9, 'body'],
-    [5, 3, 2, 1, 'highlight'],
-    [5, 4, 1, 2, 'highlight'],
-    [4, 10, 8, 1, 'shade'],
-    [7, 12, 2, 1, 'outline'],
-    [6, 13, 4, 1, 'outline'],
-    [8, 14, 1, 1, 'shade'],
-    ...face(mood),
-  ]
 }
 
 export function Helium({
@@ -159,14 +175,26 @@ export function Helium({
 }): ReactNode {
   const label = HELIUM_LABELS[mood]
   return (
-    <PixelMascot
-      palette={PALETTE}
-      frame={frame(mood)}
-      size={size}
-      className={className}
-      label={`Helium — ${label}`}
-      mood={mood}
-      animate={animate}
-    />
+    <span
+      className={cn('inline-flex shrink-0 select-none', animate && MOOD_ANIMATION[mood], className)}
+      role="img"
+      aria-label={`Helium — ${label}`}
+      title={`Helium — ${label}`}
+    >
+      <svg viewBox="0 0 16 16" width={size} height={size} shapeRendering="crispEdges" aria-hidden="true">
+        <rect x={5} y={15} width={6} height={1} fill="#000000" opacity={0.07} />
+        <rect x={3} y={1} width={10} height={11} fill={PALETTE.outline} />
+        <rect x={4} y={2} width={8} height={9} fill={PALETTE.body} />
+        <rect x={5} y={3} width={2} height={1} fill={PALETTE.highlight} />
+        <rect x={5} y={4} width={1} height={2} fill={PALETTE.highlight} />
+        <rect x={4} y={10} width={8} height={1} fill={PALETTE.shade} />
+        <rect x={7} y={12} width={2} height={1} fill={PALETTE.outline} />
+        <rect x={6} y={13} width={4} height={1} fill={PALETTE.outline} />
+        <rect x={8} y={14} width={1} height={1} fill={PALETTE.shade} />
+        {face(mood).map(([x, y, w, h, color], index) => (
+          <rect key={index} x={x} y={y} width={w} height={h} fill={PALETTE[color]} />
+        ))}
+      </svg>
+    </span>
   )
 }

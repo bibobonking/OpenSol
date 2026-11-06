@@ -5,6 +5,7 @@ import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
   forgetWorkspace as forgetWorkspaceInDaemon,
+  getProjectInstructions,
   getWorkspaceTree,
   gitSummary as fetchGitSummary,
   readWorkspaceFile,
@@ -52,10 +53,13 @@ interface WorkspaceStore {
   openingFile: boolean
   git: GitState
   gitLoading: boolean
+  /** The project instruction file (MAXCODE.md, AGENTS.md, CLAUDE.md) the agent reads each turn. */
+  instructions: { file: string; content: string; truncated: boolean }
   hydrate: (info: WorkspaceInfo) => Promise<void>
   loadTree: () => Promise<void>
   refresh: (options?: { treeOnly?: boolean }) => Promise<void>
-  openFile: (path: string) => Promise<void>
+  openFile: (path: string, options?: { force?: boolean }) => Promise<void>
+  loadInstructions: () => Promise<void>
   closeFile: () => void
   setContent: (content: string) => void
   saveFile: () => Promise<boolean>
@@ -87,6 +91,7 @@ export const useWorkspace = create<WorkspaceStore>()((set, get) => ({
   openingFile: false,
   git: EMPTY_GIT,
   gitLoading: false,
+  instructions: { file: '', content: '', truncated: false },
 
   hydrate: async (info) => {
     set({
@@ -103,6 +108,18 @@ export const useWorkspace = create<WorkspaceStore>()((set, get) => ({
     if (info.available) {
       await get().loadTree()
       void get().loadGit()
+      void get().loadInstructions()
+    } else {
+      set({ instructions: { file: '', content: '', truncated: false } })
+    }
+  },
+
+  loadInstructions: async () => {
+    if (!get().info.available) return
+    try {
+      set({ instructions: await getProjectInstructions() })
+    } catch {
+      set({ instructions: { file: '', content: '', truncated: false } })
     }
   },
 
@@ -122,6 +139,7 @@ export const useWorkspace = create<WorkspaceStore>()((set, get) => ({
         root: result.root,
         info: result.workspace,
       })
+      void get().loadInstructions()
     } catch (error) {
       set({
         loadingTree: false,
@@ -141,15 +159,15 @@ export const useWorkspace = create<WorkspaceStore>()((set, get) => ({
       return
     }
     try {
-      await get().openFile(active)
+      await get().openFile(active, { force: true })
     } catch {
       // A tree refresh is still useful if the file disappeared mid-read.
     }
   },
 
-  openFile: async (path) => {
+  openFile: async (path, { force = false } = {}) => {
     if (!path || get().openingFile) return
-    if (get().activeFile === path && get().file) return
+    if (!force && get().activeFile === path && get().file) return
     if (get().dirty) {
       const saved = await get().saveFile()
       if (!saved) return
@@ -252,6 +270,7 @@ export const useWorkspace = create<WorkspaceStore>()((set, get) => ({
       content: '',
       dirty: false,
       git: EMPTY_GIT,
+      instructions: { file: '', content: '', truncated: false },
     })
   },
 

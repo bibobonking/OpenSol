@@ -22,6 +22,36 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
   '.wasm': 'application/wasm',
+  '.csv': 'text/csv; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.avif': 'image/avif',
+  '.otf': 'font/otf',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+}
+
+export function mimeFor(file) {
+  return MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream'
+}
+
+export function streamFile(req, res, absolute, size, headers = {}) {
+  res.writeHead(200, {
+    'Content-Type': mimeFor(absolute),
+    'Content-Length': size,
+    ...headers,
+  })
+  if (req.method === 'HEAD') {
+    res.end()
+    return
+  }
+  const stream = createReadStream(absolute)
+  stream.on('error', () => res.destroy())
+  stream.pipe(res)
 }
 
 export class HttpError extends Error {
@@ -179,7 +209,7 @@ export async function serveStatic(req, res, root, pathname) {
     info = await stat(target).catch(() => null)
   }
   if (!info?.isFile()) {
-    throw new HttpError(503, 'OpenSol is not built yet. Run the remote build and place the output in dist/.', 'dist_missing')
+    throw new HttpError(503, 'MaxCode is not built yet. Run the remote build and place the output in dist/.', 'dist_missing')
   }
 
   const ext = path.extname(target).toLowerCase()

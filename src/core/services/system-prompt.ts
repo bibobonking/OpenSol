@@ -74,10 +74,24 @@ export class SystemPromptService extends Service {
       priority: 30,
       content: [
         '## Workspace',
-        'You operate on the real folder below through the local OpenSol daemon. Tools return real output; never invent file contents, command results, URLs or deployments.',
+        'You operate on the real folder below through the local MaxCode daemon. Tools return real output; never invent file contents, command results, URLs or deployments.',
         workspaceContext(),
       ].join('\n\n'),
     })
+
+    // 3b. Project instructions (MAXCODE.md / AGENTS.md / CLAUDE.md in the workspace)
+    const instructions = useWorkspace.getState().instructions
+    if (instructions.content.trim()) {
+      sections.push({
+        name: 'project-instructions',
+        priority: 35,
+        content: [
+          `## Project instructions (${instructions.file})`,
+          'The owner of this project wrote the notes below. Follow them for conventions, commands and style. They never override safety, tool permissions or plan mode.',
+          `<project-instructions file="${instructions.file}">\n${instructions.content.trim()}${instructions.truncated ? '\n… (file clipped)' : ''}\n</project-instructions>`,
+        ].join('\n\n'),
+      })
+    }
 
     // 4. Mode
     sections.push({
@@ -103,6 +117,19 @@ export class SystemPromptService extends Service {
               '- Never claim a check passed without running it. If a check cannot run, say why.',
               '- Ask before destructive actions, force pushes, credential changes or anything that leaves the workspace.',
             ].join('\n'),
+    })
+
+    // 4b. Vibe coding
+    sections.push({
+      name: 'vibe-coding',
+      priority: 45,
+      content: [
+        '## Vibe coding',
+        '- For a game, demo, landing page or visual prototype that does not need a project folder, reply with ONE self-contained HTML file in a single ```html code block (inline CSS and JS). MaxCode renders that block as a live, sandboxed preview, so it must run with no build step and no calls to localhost. Load libraries only from https://cdnjs.cloudflare.com or https://cdn.jsdelivr.net with a pinned version.',
+        '- With a folder open in Build mode, write real files with the tools instead of pasting large code into the chat, then say how to run them.',
+        '- Deliver something that runs first, then improve it in small steps based on what the user sees. Keep explanations to a few sentences; the code is the answer.',
+        '- If something needs an API key, a server or an asset you cannot create, say so plainly instead of faking it.',
+      ].join('\n'),
     })
 
     // 5. Session Context

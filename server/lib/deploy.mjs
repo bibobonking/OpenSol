@@ -299,7 +299,7 @@ async function netlifyDeploy({ cwd, targetDir, projectName, siteId, onLog, signa
       '--site',
       site,
       '--message',
-      `OpenSol deploy ${new Date().toISOString()}`,
+      `MaxCode deploy ${new Date().toISOString()}`,
     ],
     { cwd, onLog, signal, env: { NETLIFY_AUTH_TOKEN: token } },
   )

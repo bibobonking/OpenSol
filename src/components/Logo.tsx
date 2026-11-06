@@ -8,10 +8,11 @@ export function LogoMark({ size = 28, className }: { size?: number; className?: 
       aria-hidden="true"
     >
       <svg viewBox="0 0 24 24" width={size} height={size} fill="none">
-        <g stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-          <circle cx="12" cy="11" r="4.4" fill="currentColor" stroke="none" />
-          <path d="M12 2.4v2.1M12 17.5v2.1M4.9 11H2.8M21.2 11h-2.1M6.9 5.9 5.4 4.4M17.1 5.9l1.5-1.5M6.9 16.1l-1.5 1.5M17.1 16.1l1.5 1.5" />
-          <path d="M3 21.2h18" strokeWidth="1.8" />
+        <g stroke="currentColor" strokeWidth="2.15" strokeLinecap="round">
+          <path d="M12 2.6v18.8" />
+          <path d="M2.6 12h18.8" />
+          <path d="M5.35 5.35 18.65 18.65" />
+          <path d="M18.65 5.35 5.35 18.65" />
         </g>
       </svg>
     </span>
@@ -24,10 +25,7 @@ export function LogoLockup({ compact = false }: { compact?: boolean }) {
       {compact ? (
         <LogoMark size={22} />
       ) : (
-        <>
-          <LogoMark size={22} />
-          <span className="font-display text-[21px] font-medium leading-none tracking-[-0.02em] text-ink">OpenSol</span>
-        </>
+        <span className="font-display text-[23px] font-medium leading-none tracking-[-0.02em] text-ink">MaxCode</span>
       )}
     </div>
   )
@@ -36,7 +34,7 @@ export function LogoLockup({ compact = false }: { compact?: boolean }) {
 export function BrandFooter() {
   return (
     <p className="text-[10.5px] tracking-[0.01em] text-faint">
-      OpenSol <span className="px-1 text-line">/</span> an OpenSoft product
+      MaxCode <span className="px-1 text-line">/</span> a DevSoft product
     </p>
   )
 }

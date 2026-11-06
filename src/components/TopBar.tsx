@@ -46,7 +46,7 @@ export function TopBar({
   const workspace = useWorkspace((state) => state.info)
   const activeModel = useActiveModel()
 
-  // Go through the theme registry so plugin themes count as dark too.
+  // Go through the theme registry so Night Owl, Claude Code, Flame and plugin themes count as dark.
   const isDark = themeIsDark(
     settings.theme,
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
@@ -55,7 +55,7 @@ export function TopBar({
   const turns = session?.messages.filter((message) => message.role === 'user').length ?? 0
 
   return (
-    <header className="relative flex h-[52px] shrink-0 items-center gap-2 border-b border-line/60 bg-panel px-3 sm:px-4">
+    <header className="relative flex h-14 shrink-0 items-center gap-2 border-b border-line/50 bg-panel/80 px-3 backdrop-blur-md sm:px-4">
       <button
         type="button"
         className="icon-button lg:hidden"
@@ -79,11 +79,11 @@ export function TopBar({
 
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {!session && <LogoMark size={19} className="lg:hidden" />}
-        <h1 className="min-w-0 truncate text-[14px] font-medium tracking-[-0.005em] text-ink">
+        <h1 className="min-w-0 truncate text-[14.5px] font-medium tracking-[-0.005em] text-ink">
           {session?.title ?? 'New conversation'}
         </h1>
         {hasConversation && (
-          <span className="hidden shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted sm:inline-flex">
+          <span className="hidden shrink-0 items-center gap-1 rounded-full bg-raised/70 px-2 py-0.5 text-[11px] text-muted sm:inline-flex">
             {settings.mode === 'plan' ? <ListChecks size={11} /> : <Sparkles size={11} />}
             {settings.mode === 'plan' ? 'Plan mode' : 'Build mode'}
           </span>

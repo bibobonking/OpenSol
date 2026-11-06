@@ -5,8 +5,7 @@ import { useSettings } from '../store/settings'
 import { useWorkspace } from '../store/workspace'
 import { cn } from '../lib/utils'
 import { computeUsage, formatTokens, shortModelName, type UsageRange } from '../lib/usage'
-import { Mascot } from './Mascot'
-import { LogoMark } from './Logo'
+import { Helium } from './Helium'
 
 const RANGES: Array<{ value: UsageRange; label: string }> = [
   { value: 'all', label: 'All' },
@@ -30,7 +29,7 @@ function heatLevel(count: number, busiest: number) {
 
 function Stat({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-lg bg-raised/40 px-3 py-2.5">
+    <div className="min-w-0 rounded-xl bg-raised/55 px-3 py-2.5">
       <p className="flex items-center gap-1.5 text-[11.5px] text-muted">
         <Icon size={12} className="shrink-0 text-faint" />
         <span className="truncate">{label}</span>
@@ -44,15 +43,14 @@ function Stat({ icon: Icon, label, value }: { icon: typeof Activity; label: stri
 
 export function HomeGreeting() {
   const daemon = useSettings((state) => state.daemon)
-  const mascot = useSettings((state) => state.mascot)
   const workspace = useWorkspace((state) => state.info)
   const home = daemon?.home ?? ''
   const name = home.split(/[\\/]/).filter(Boolean).pop() || workspace.name || 'there'
   return (
     <div className="flex items-center justify-center gap-3 text-center">
-      {mascot === 'off' ? <LogoMark size={46} /> : <Mascot id={mascot} mood="wave" size={46} />}
-      <h1 className="font-display text-[36px] font-normal leading-tight tracking-[-0.02em] text-ink sm:text-[44px]">
-        What are we building, {name}?
+      <Helium mood="wave" size={46} />
+      <h1 className="font-display text-[32px] font-normal leading-tight tracking-[-0.02em] text-ink sm:text-[38px]">
+        What&apos;s up next, {name}?
       </h1>
     </div>
   )
@@ -76,7 +74,7 @@ export function HomeDashboard() {
 
   return (
     <div className="relative w-full">
-      <section className="relative overflow-hidden rounded-xl border border-line/80 bg-transparent">
+      <section className="relative overflow-hidden rounded-2xl border border-line/80 bg-transparent">
         <div className="relative flex flex-wrap items-center justify-between gap-2 border-b border-line/70 px-3 py-2.5">
           <div className="inline-flex items-center rounded-lg bg-raised/70 p-0.5">
             {(['overview', 'models'] as const).map((value) => (

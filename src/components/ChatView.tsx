@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Bug, FolderSearch, Globe2, KeyRound, ListChecks, Sparkles } from 'lucide-react'
+import { ArrowUp, Bug, FolderSearch, Gamepad2, Globe2, KeyRound, LayoutTemplate, ListChecks, Sparkles } from 'lucide-react'
 import type { Attachment } from '../types'
 import { createId, useChats } from '../store/chats'
 import { activeModelId, hasCredentials, useSettings } from '../store/settings'
@@ -9,7 +9,7 @@ import { useWorkspace } from '../store/workspace'
 import { getProviderName } from '../data/providers'
 import { stopRun, runAgent } from '../agent'
 import { getContextUsage } from '../lib/context'
-import { mascotMood } from '../lib/mascot'
+import { heliumMood } from '../lib/helium'
 import { formatTokens } from '../lib/usage'
 import { groupConversationTurns } from '../lib/conversation'
 import { TopBar, type ChatViewMode } from './TopBar'
@@ -20,10 +20,16 @@ import { TrajectoryView } from './TrajectoryView'
 
 const STARTERS = [
   {
-    icon: FolderSearch,
-    label: 'Audit this folder',
+    icon: Gamepad2,
+    label: 'Build a game',
     prompt:
-      'Audit this workspace. Read the key files first, then list the three most important improvements with file references and a short plan.',
+      'Build a small browser game as one self-contained index.html (canvas, no build step). Make it playable with keyboard and touch, with a score and a restart button. Put the whole file in a single html code block so I can preview it.',
+  },
+  {
+    icon: LayoutTemplate,
+    label: 'Design a landing page',
+    prompt:
+      'Design a polished, responsive landing page for a small indie game studio. Choose a distinctive typographic style, keep it to one file, and put everything in a single html code block so I can preview it.',
   },
   {
     icon: Bug,
@@ -32,10 +38,10 @@ const STARTERS = [
       'Inspect this workspace for a real bug. Explain the root cause, make the smallest correct fix, and run the project checks.',
   },
   {
-    icon: ListChecks,
-    label: 'Plan a feature',
+    icon: FolderSearch,
+    label: 'Audit this folder',
     prompt:
-      'Plan a small feature for this project. Inspect the current structure, then propose the smallest implementation with the files involved and how to verify it.',
+      'Audit this workspace. Read the key files first, then list the three most important improvements with file references and a short plan.',
   },
   {
     icon: Globe2,
@@ -77,7 +83,7 @@ export function ChatView() {
   const activeSkills = settings.skills.filter((skill) => skill.enabled).length
   const turns = groupConversationTurns(messages)
   const context = getContextUsage(messages, activeModel)
-  const mood = mascotMood(messages, streaming)
+  const mood = heliumMood(messages, streaming)
 
   const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
     const node = scrollRef.current
@@ -166,7 +172,7 @@ export function ChatView() {
       case 'search': {
         if (!args.trim()) {
           setDraft('/search ')
-          notify('Type what you want OpenSol to research.', 'info')
+          notify('Type what you want MaxCode to research.', 'info')
           focusComposer()
           return false
         }
@@ -188,7 +194,7 @@ export function ChatView() {
       case 'build': {
         setMode('build')
         if (!args.trim()) {
-          notify('Build mode is on: OpenSol can edit files and run commands.', 'info')
+          notify('Build mode is on: MaxCode can edit files and run commands.', 'info')
           focusComposer()
           return true
         }
@@ -266,8 +272,7 @@ export function ChatView() {
                 hints
                 autoFocus
                 placeholder={connected ? 'How can I help you today?' : 'Add a provider key to start'}
-                mascotMood={connected ? 'idle' : 'sleepy'}
-                surface="home"
+                heliumMood={connected ? 'idle' : 'sleepy'}
               />
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                 {STARTERS.map((starter) => (
@@ -275,7 +280,7 @@ export function ChatView() {
                     key={starter.label}
                     type="button"
                     onClick={() => useStarter(starter.prompt)}
-                    className="inline-flex h-8 items-center gap-2 rounded-lg border border-line/80 px-3 text-[12px] font-medium text-muted transition-colors hover:bg-raised/60 hover:text-ink"
+                    className="inline-flex h-9 items-center gap-2 rounded-full border border-line/80 px-3.5 text-[12.5px] font-medium text-muted transition-colors hover:bg-raised/60 hover:text-ink"
                   >
                     <starter.icon size={14} strokeWidth={1.7} className="text-faint" />
                     {starter.label}
@@ -362,8 +367,7 @@ export function ChatView() {
                 placeholder={connected ? 'How can I help you today?' : 'Add a provider key to start'}
                 contextPct={context.pct}
                 contextTitle={`Context: ~${formatTokens(context.used)} / ${formatTokens(context.limit)} tokens`}
-                mascotMood={mood}
-                surface="conversation"
+                heliumMood={mood}
               />
               <div className="mt-2 flex items-center justify-between gap-3 px-2 text-[11px] text-faint">
                 <span className="flex items-center gap-1">

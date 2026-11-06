@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Check,
   Download,
+  FileText,
   Folder,
   LoaderCircle,
   MoreHorizontal,
@@ -133,13 +134,32 @@ export function Sidebar() {
     deleteSession(id)
   }
 
+  const exportMarkdown = (id: string) => {
+    const session = sessions.find((item) => item.id === id)
+    if (!session) return
+    setMenu(null)
+    const body = session.messages
+      .flatMap((message) => {
+        if (message.role === 'user') return [`## You\n\n${message.content}`]
+        if (message.role === 'assistant' && message.content.trim()) return [`## MaxCode\n\n${message.content.trim()}`]
+        return []
+      })
+      .join('\n\n')
+    downloadText(
+      `maxcode-${session.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'conversation'}.md`,
+      `# ${session.title}\n\n${body}\n`,
+      'text/markdown',
+    )
+    notify('Conversation exported as Markdown.', 'success')
+  }
+
   const exportChat = (id: string) => {
     const session = sessions.find((item) => item.id === id)
     if (!session) return
     setMenu(null)
     downloadText(
-      `opensol-${session.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'conversation'}.json`,
-      JSON.stringify({ app: 'OpenSol', exportedAt: new Date().toISOString(), session }, null, 2),
+      `maxcode-${session.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'conversation'}.json`,
+      JSON.stringify({ app: 'MaxCode', exportedAt: new Date().toISOString(), session }, null, 2),
       'application/json',
     )
     notify('Conversation exported.', 'success')
@@ -148,12 +168,12 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-50 flex h-dvh w-[272px] shrink-0 flex-col border-r border-line/60 bg-canvas transition-transform duration-200 lg:static lg:z-auto',
+        'fixed inset-y-0 left-0 z-50 flex h-dvh w-[288px] shrink-0 flex-col border-r border-line/60 bg-canvas transition-transform duration-200 lg:static lg:z-auto',
         mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         sidebarCollapsed && 'lg:hidden',
       )}
     >
-      <div className="flex h-[52px] items-center gap-2 pl-2.5 pr-2.5">
+      <div className="flex h-14 items-center gap-2 pl-2.5 pr-2.5">
         <button
           type="button"
           className="icon-button hidden lg:inline-flex"
@@ -176,7 +196,7 @@ export function Sidebar() {
 
       <nav className="space-y-0.5 px-2 pt-1">
         <button type="button" onClick={startNewChat} className="nav-item">
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">
+          <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">
             <Plus size={14} strokeWidth={2.2} />
           </span>
           New session
@@ -224,7 +244,7 @@ export function Sidebar() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
-            className="h-8 w-full rounded-md border border-transparent bg-transparent pl-[38px] pr-2.5 text-[13px] text-ink outline-none transition-colors placeholder:text-ink hover:bg-raised/70 focus:border-line focus:bg-panel focus:placeholder:text-faint"
+            className="h-9 w-full rounded-lg border border-transparent bg-transparent pl-[38px] pr-2.5 text-[14px] text-ink outline-none transition-colors placeholder:text-ink hover:bg-raised/70 focus:border-line focus:bg-panel focus:placeholder:text-faint"
             aria-label="Search conversations"
           />
         </div>
@@ -233,7 +253,7 @@ export function Sidebar() {
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2 pt-5">
         <div className="mb-5">
           <div className="flex items-center justify-between px-2.5 pb-1.5">
-            <p className="text-[11.5px] font-medium text-muted">Workspaces</p>
+            <p className="text-[12.5px] font-medium text-muted">Workspaces</p>
             <button
               type="button"
               onClick={() => {
@@ -294,7 +314,7 @@ export function Sidebar() {
 
         <div>
           <div className="flex items-center justify-between px-2.5 pb-1.5">
-            <p className="text-[11.5px] font-medium text-muted">Recents</p>
+            <p className="text-[12.5px] font-medium text-muted">Recents</p>
             <span className="text-[11px] tabular-nums text-faint">{filtered.length}</span>
           </div>
           {groups.length === 0 && (
@@ -390,7 +410,7 @@ export function Sidebar() {
 
       <div className="p-2">
         <div className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-raised/60">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink font-display text-[12px] font-medium text-panel">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink font-display text-[14px] font-medium text-panel">
             {profileName.charAt(0).toUpperCase()}
           </div>
           <button
@@ -453,7 +473,14 @@ export function Sidebar() {
                     onClick={() => exportChat(session.id)}
                     className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[11.5px] text-muted hover:bg-raised hover:text-ink"
                   >
-                    <Download size={12} /> Export
+                    <Download size={12} /> Export JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportMarkdown(session.id)}
+                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[11.5px] text-muted hover:bg-raised hover:text-ink"
+                  >
+                    <FileText size={12} /> Export Markdown
                   </button>
                   <div className="my-1 border-t border-line" />
                   <button

@@ -140,7 +140,7 @@ export function apply(ctx: Context) {
       async execute(args, exec): Promise<ToolResult> {
         const path = requireString(args, 'path')
         const content = requireString(args, 'content')
-        const result = record((await executeDaemonTool('write_file', { path, content }, exec.mode, exec.signal)).result)
+        const result = record((await executeDaemonTool('write_file', { path, content }, exec.mode, exec.signal, exec.turnId)).result)
         await refreshWorkspace()
         const verb = result.created === true ? 'Created' : 'Updated'
         return {
@@ -166,7 +166,7 @@ export function apply(ctx: Context) {
       async execute(args, exec): Promise<ToolResult> {
         const path = requireString(args, 'path')
         const content = requireString(args, 'content')
-        const result = record((await executeDaemonTool('rewrite_file', { path, content }, exec.mode, exec.signal)).result)
+        const result = record((await executeDaemonTool('rewrite_file', { path, content }, exec.mode, exec.signal, exec.turnId)).result)
         await refreshWorkspace()
         return {
           output: `Rewrote ${textValue(result.path) || path} · ${content.split('\n').length} lines, ${numberValue(result.size) ?? content.length} bytes.`,
@@ -202,6 +202,7 @@ export function apply(ctx: Context) {
               { path, oldText, newText, replaceAll: args.replaceAll === true },
               exec.mode,
               exec.signal,
+              exec.turnId,
             )
           ).result,
         )

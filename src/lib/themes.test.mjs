@@ -33,11 +33,11 @@ function block(needle) {
   return css.slice(start, css.indexOf('}', start))
 }
 
-test('light and dark define the full semantic token set', () => {
-  for (const id of ['light', 'dark']) {
-    const body = block(`[data-theme='${id}']`)
+test('every named palette defines the full semantic token set', () => {
+  for (const theme of THEMES) {
+    const body = block(`[data-theme='${theme.id}']`)
     for (const token of TOKENS) {
-      assert.match(body, new RegExp(`--${token}:`), `${id} is missing --${token}`)
+      assert.match(body, new RegExp(`--${token}:`), `${theme.id} is missing --${token}`)
     }
   }
   const light = block(':root,')
@@ -46,17 +46,13 @@ test('light and dark define the full semantic token set', () => {
   }
 })
 
-test('retired palettes migrate to System', () => {
-  for (const id of ['night-owl', 'claude-code', 'flame']) {
-    assert.equal(normalizeTheme(id), 'system')
-    assert.equal(css.includes(`[data-theme='${id}']`), false)
-  }
-})
-
 test('legacy, named, system and invalid themes resolve', () => {
   assert.equal(normalizeTheme('light'), 'light')
   assert.equal(normalizeTheme('dark'), 'dark')
   assert.equal(normalizeTheme('system'), 'system')
+  assert.equal(normalizeTheme('night-owl'), 'night-owl')
+  assert.equal(normalizeTheme('claude-code'), 'claude-code')
+  assert.equal(normalizeTheme('flame'), 'flame')
   assert.equal(normalizeTheme(undefined), 'system')
   assert.equal(normalizeTheme(7), 'system')
   assert.equal(normalizeTheme('Not A Theme'), 'system')
@@ -68,9 +64,9 @@ test('system follows the OS preference while named themes do not', () => {
   assert.equal(resolveTheme('system', true), 'dark')
   assert.equal(resolveTheme('system', false), 'light')
   assert.equal(resolveTheme('light', true), 'light')
-  assert.equal(resolveTheme('flame', false), 'light')
+  assert.equal(resolveTheme('flame', false), 'flame')
   assert.equal(themeIsDark('light', true), false)
   assert.equal(themeIsDark('dark', false), true)
-  assert.equal(themeIsDark('night-owl', false), false)
+  assert.equal(themeIsDark('night-owl', false), true)
   assert.equal(themeIsDark('system', true), true)
 })

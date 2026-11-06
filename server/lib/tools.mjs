@@ -17,6 +17,7 @@ import { isIP } from 'node:net'
 import path from 'node:path'
 import { HttpError } from './http.mjs'
 import { loadState, loadSecretsSafe } from './store.mjs'
+import { describeCheckpoint, dropCheckpoint, readCheckpoint, recordBefore } from './checkpoints.mjs'
 
 const MAX_READ = 2 * 1024 * 1024
 const MAX_WRITE = 8 * 1024 * 1024
@@ -99,7 +100,7 @@ export async function resolveWorkspacePath(input, { allowRoot = true } = {}) {
     throw new HttpError(403, 'That path is outside the open workspace.', 'outside_workspace')
   }
   if (/^(.*\/)?\.git(\/|$)/.test(rel)) {
-    throw new HttpError(403, 'OpenSol does not edit the .git directory.', 'git_protected')
+    throw new HttpError(403, 'MaxCode does not edit the .git directory.', 'git_protected')
   }
   const absolute = await insideRoot(root, candidate)
   return { root, absolute, relative: rel || '.' }
@@ -210,7 +211,7 @@ export async function writeWorkspaceFile(input, content, { create = true } = {})
   const { root, absolute, relative } = await resolveWorkspacePath(input, { allowRoot: false })
   if (typeof content !== 'string') throw new HttpError(400, 'File content must be text.', 'bad_content')
   if (Buffer.byteLength(content, 'utf8') > MAX_WRITE) {
-    throw new HttpError(413, 'That file is too large to write from OpenSol.', 'file_too_large')
+    throw new HttpError(413, 'That file is too large to write from MaxCode.', 'file_too_large')
   }
   const existing = await stat(absolute).catch(() => null)
   if (!existing && !create) throw new HttpError(404, `File not found: ${relative}`, 'not_found')
@@ -671,7 +672,7 @@ async function duckduckgo(query, signal) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 OpenSol/1.0',
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 MaxCode/1.0',
     },
     body: new URLSearchParams({ q: query }).toString(),
     signal,
@@ -814,7 +815,7 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
       redirect: 'manual',
       headers: {
         Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5',
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 OpenSol/1.0',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 MaxCode/1.0',
       },
       signal,
     })
@@ -832,7 +833,7 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
   }
   const type = response.headers.get('content-type') ?? ''
   if (!/text\/|json|xml|javascript/i.test(type)) {
-    throw new HttpError(415, `OpenSol cannot read ${type || 'that content type'}.`, 'unsupported_type')
+    throw new HttpError(415, `MaxCode cannot read ${type || 'that content type'}.`, 'unsupported_type')
   }
   const raw = (await response.text()).slice(0, maxBytes)
   const text = /html/i.test(type) ? stripHtml(raw) : raw
@@ -847,8 +848,89 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
   }
 }
 
-export async function executeTool(name, args = {}, { mode = 'build' } = {}) {
+const INSTRUCTION_FILES = ['MAXCODE.md', 'AGENTS.md', 'CLAUDE.md', '.maxcode/instructions.md']
+const MAX_INSTRUCTIONS = 20_000
+
+/** The first project instruction file found in the open workspace, if any. */
+export async function readProjectInstructions() {
+  const empty = { file: '', content: '', truncated: false }
+  try {
+    await workspaceRoot()
+  } catch {
+    return empty
+  }
+  for (const name of INSTRUCTION_FILES) {
+    try {
+      const { absolute } = await resolveWorkspacePath(name, { allowRoot: false })
+      const info = await stat(absolute)
+      if (!info.isFile()) continue
+      const buffer = await readFile(absolute)
+      if (isProbablyBinary(buffer)) continue
+      const text = buffer.toString('utf8')
+      return { file: name, content: text.slice(0, MAX_INSTRUCTIONS), truncated: text.length > MAX_INSTRUCTIONS }
+    } catch {
+      // Missing or unreadable: try the next candidate.
+    }
+  }
+  return empty
+}
+
+const FILE_MUTATIONS = new Set(['write_file', 'rewrite_file', 'edit_file'])
+
+/** Undo the file edits recorded for one turn. Shell changes are not part of a checkpoint. */
+export async function restoreCheckpoint(id) {
+  const checkpoint = await readCheckpoint(id)
+  if (!checkpoint) throw new HttpError(404, 'This checkpoint has expired or does not exist.', 'checkpoint_missing')
+  const root = await workspaceRoot()
+  if (checkpoint.root !== root) {
+    throw new HttpError(409, 'This checkpoint belongs to a different workspace.', 'checkpoint_workspace')
+  }
+  const restored = []
+  const removed = []
+  const skipped = []
+  for (const [relative, entry] of Object.entries(checkpoint.files)) {
+    const { absolute } = await resolveWorkspacePath(relative, { allowRoot: false })
+    if (entry.skipped) {
+      skipped.push(relative)
+      continue
+    }
+    if (!entry.existed) {
+      const info = await stat(absolute).catch(() => null)
+      if (info?.isFile()) await rm(absolute, { force: true })
+      removed.push(relative)
+      continue
+    }
+    await writeWorkspaceFile(relative, entry.content ?? '')
+    if (typeof entry.mode === 'number') await chmod(absolute, entry.mode).catch(() => undefined)
+    restored.push(relative)
+  }
+  await dropCheckpoint(id)
+  return { id, restored, removed, skipped }
+}
+
+export async function checkpointSummary(id) {
+  const checkpoint = await readCheckpoint(id)
+  return checkpoint ? describeCheckpoint(checkpoint) : null
+}
+
+export async function executeTool(name, args = {}, { mode = 'build', checkpoint = '' } = {}) {
   const input = args && typeof args === 'object' ? args : {}
+  // The prompt promises the daemon enforces plan mode, so enforce it here and not only in the UI.
+  if (mode === 'plan' && FILE_MUTATIONS.has(name)) {
+    throw new HttpError(
+      403,
+      'Plan mode is read-only. Use read_file, list_files, grep or a read-only shell command.',
+      'plan_readonly',
+    )
+  }
+  if (checkpoint && FILE_MUTATIONS.has(name)) {
+    try {
+      const { root, absolute, relative } = await resolveWorkspacePath(String(input.path ?? ''), { allowRoot: false })
+      await recordBefore(checkpoint, root, relative, absolute)
+    } catch {
+      // A failed snapshot must not block the edit; the tool reports its own path errors.
+    }
+  }
   switch (name) {
     case 'shell':
       return runShell(String(input.command ?? ''), { mode, timeoutMs: Number(input.timeoutMs) })

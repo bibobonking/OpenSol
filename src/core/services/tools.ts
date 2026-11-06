@@ -74,8 +74,9 @@ export class ToolService extends Service {
     mode: AgentMode,
     signal: AbortSignal,
     callId?: string,
+    turnId?: string,
   ): Promise<ToolResult> {
-    const exec: ToolExecutionContext = { name, args, settings, mode, signal, callId }
+    const exec: ToolExecutionContext = { name, args, settings, mode, signal, callId, turnId }
 
     // 1. tools/pre-execute waterfall (approval, permission gate, mode checks)
     const preDecision: ToolPreExecuteResult = await this.ctx.events.waterfall(

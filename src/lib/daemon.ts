@@ -80,7 +80,7 @@ export async function ensureSession(force = false): Promise<void> {
       })
     } catch {
       throw new DaemonError(
-        'OpenSol’s local daemon is not reachable. Start it with “npm start” in the OpenSol folder, then reload this page.',
+        'MaxCode’s local daemon is not reachable. Start it with “npm start” in the MaxCode folder, then reload this page.',
         0,
         'daemon_unreachable',
       )
@@ -342,10 +342,37 @@ export function executeDaemonTool(
   args: Record<string, unknown>,
   mode: AgentMode,
   signal?: AbortSignal,
+  /** Groups file edits of one turn so they can be undone together. */
+  checkpoint?: string,
 ) {
   return api<DaemonToolResult>(
     '/api/tools/execute',
-    { ...jsonBody({ name, args, mode }), signal },
+    { ...jsonBody({ name, args, mode, checkpoint }), signal },
+  )
+}
+
+export function getPreviewToken() {
+  return api<{ token: string }>('/api/preview/token')
+}
+
+export function getProjectInstructions() {
+  return api<{ file: string; content: string; truncated: boolean }>('/api/workspace/instructions')
+}
+
+export interface CheckpointSummary {
+  id: string
+  createdAt: number
+  files: Array<{ path: string; existed: boolean; skipped: boolean }>
+}
+
+export function getCheckpoint(id: string) {
+  return api<CheckpointSummary>(`/api/checkpoints/${encodeURIComponent(id)}`)
+}
+
+export function restoreCheckpoint(id: string) {
+  return api<{ id: string; restored: string[]; removed: string[]; skipped: string[] }>(
+    `/api/checkpoints/${encodeURIComponent(id)}/restore`,
+    { method: 'POST', body: JSON.stringify({}) },
   )
 }
 
@@ -359,6 +386,7 @@ export async function requestLLM(
   model: string,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  retry = true,
 ): Promise<Response> {
   await ensureSession()
   let response: Response
@@ -376,6 +404,11 @@ export async function requestLLM(
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
     throw new DaemonError('Lost the connection to the local daemon while calling the model.', 0, 'daemon_unreachable')
+  }
+  // The daemon forgets sessions when it restarts; get a fresh one and retry once.
+  if (response.status === 401 && retry) {
+    await ensureSession(true)
+    return requestLLM(provider, kind, model, body, signal, false)
   }
   if (!response.ok) throw await parseError(response)
   return response

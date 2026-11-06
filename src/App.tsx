@@ -30,7 +30,7 @@ function BootScreen({
       <div className="hero-wash pointer-events-none absolute inset-0" aria-hidden="true" />
       <div className="relative flex w-full max-w-[420px] flex-col items-center text-center">
         <LogoMark size={46} />
-        <h1 className="mt-4 font-display text-[30px] font-medium tracking-[-0.03em] text-ink">OpenSol</h1>
+        <h1 className="mt-4 font-display text-[30px] font-medium tracking-[-0.03em] text-ink">MaxCode</h1>
         {phase === 'error' ? (
           <>
             <div className="mt-5 w-full rounded-xl border border-danger/25 bg-danger/[0.045] px-4 py-3 text-left">
@@ -49,13 +49,13 @@ function BootScreen({
               Try again
             </button>
             <p className="mt-3 text-[10.5px] leading-relaxed text-faint">
-              Start OpenSol with <code className="rounded bg-raised px-1 py-0.5 font-mono text-[10px]">npm start</code>{' '}
-              in the OpenSol folder, then reload this page.
+              Start MaxCode with <code className="rounded bg-raised px-1 py-0.5 font-mono text-[10px]">npm start</code>{' '}
+              in the MaxCode folder, then reload this page.
             </p>
           </>
         ) : (
           <>
-            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.18em] text-faint">by OpenSoft</p>
+            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.18em] text-faint">by DevSoft</p>
             <p className="mt-5 flex items-center gap-2 text-[12.5px] text-muted">
               <Spinner size={13} className="text-accent" />
               Starting your local agent…
@@ -103,7 +103,7 @@ export default function App() {
       root.classList.toggle('dark', themeIsDark(theme, media.matches))
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', themeIsDark(theme, media.matches) ? '#191919' : '#fafafa')
+        ?.setAttribute('content', themeIsDark(theme, media.matches) ? '#262624' : '#faf9f5')
       try {
         localStorage.setItem('maxcode.theme', theme)
       } catch {
@@ -122,10 +122,30 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      const mod = event.metaKey || event.ctrlKey
+      const key = event.key.toLowerCase()
+      if (mod && key === 'k') {
         event.preventDefault()
         setPaletteOpen(!useUi.getState().paletteOpen)
         return
+      }
+      if (mod && !event.shiftKey && !event.altKey) {
+        if (key === 'b') {
+          event.preventDefault()
+          useUi.getState().toggleSidebar()
+          return
+        }
+        if (key === ',') {
+          event.preventDefault()
+          useUi.getState().openSettings('general')
+          return
+        }
+        if (key === '.') {
+          event.preventDefault()
+          const ui = useUi.getState()
+          ui.setWorkspaceOpen(!ui.workspaceOpen)
+          return
+        }
       }
       if (event.key === 'Escape' && useUi.getState().mobileSidebarOpen) {
         setMobileSidebarOpen(false)

@@ -41,6 +41,8 @@ export interface ToolExecutionContext {
   mode: AgentMode
   signal: AbortSignal
   callId?: string
+  /** The user message that started this turn; file edits are checkpointed under it. */
+  turnId?: string
 }
 
 export type ToolPreExecuteDecision = 'allow' | 'ask' | 'deny'

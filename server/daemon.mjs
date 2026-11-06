@@ -15,6 +15,7 @@ import {
   sendError,
   serveStatic,
   setCookie,
+  streamFile,
 } from './lib/http.mjs'
 import {
   addWorkspace,
@@ -45,6 +46,7 @@ import {
 } from './lib/providers.mjs'
 import {
   browseDirectories,
+  checkpointSummary,
   createWorkspaceEntry,
   deleteWorkspaceEntry,
   discoverWorkspace,
@@ -52,8 +54,11 @@ import {
   executeTool,
   gitSummary,
   listTree,
+  readProjectInstructions,
   readWorkspaceFile,
   renameWorkspaceEntry,
+  resolveWorkspacePath,
+  restoreCheckpoint,
   runGit,
   runShell,
   workspaceRoot,
@@ -78,6 +83,8 @@ const SESSION_COOKIE = 'maxcode_session'
 const CSRF_HEADER = 'x-maxcode-csrf'
 const SESSION_TTL = 14 * 24 * 60 * 60 * 1000
 const sessions = new Map()
+/** Unguessable per-session tokens that let a sandboxed preview iframe fetch workspace files. */
+const previewTokens = new Map()
 
 let port = 4174
 let host = '127.0.0.1'
@@ -112,7 +119,7 @@ function allowedOrigins() {
 function guardRequest(req) {
   const hostHeader = String(req.headers.host ?? '').toLowerCase()
   if (!hostHeader || !allowedHosts().has(hostHeader)) {
-    throw new HttpError(403, 'OpenSol only answers requests addressed to localhost.', 'bad_host')
+    throw new HttpError(403, 'MaxCode only answers requests addressed to localhost.', 'bad_host')
   }
   const origin = String(req.headers.origin ?? '')
   if (origin && !allowedOrigins().has(origin.toLowerCase())) {
@@ -127,7 +134,10 @@ function guardRequest(req) {
 function purgeSessions() {
   const now = Date.now()
   for (const [token, session] of sessions) {
-    if (now - session.lastSeen > SESSION_TTL) sessions.delete(token)
+    if (now - session.lastSeen > SESSION_TTL) {
+      if (session.previewToken) previewTokens.delete(session.previewToken)
+      sessions.delete(token)
+    }
   }
 }
 
@@ -146,7 +156,7 @@ function sessionFrom(req) {
 
 function requireSession(req) {
   const session = sessionFrom(req)
-  if (!session) throw new HttpError(401, 'Open OpenSol from its local address to start a session.', 'no_session')
+  if (!session) throw new HttpError(401, 'Open MaxCode from its local address to start a session.', 'no_session')
   return session
 }
 
@@ -466,7 +476,71 @@ function providerFromPath(pathname, prefix) {
   return provider
 }
 
+const PREVIEW_CSP = [
+  // An opaque origin: the previewed page cannot read cookies or call the daemon API.
+  'sandbox allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock',
+  "default-src 'self' data: blob: https:",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https:",
+  "style-src 'self' 'unsafe-inline' https:",
+  'img-src * data: blob:',
+  'font-src * data:',
+  'media-src * data: blob:',
+  "connect-src 'self' https: data: blob:",
+  "frame-ancestors 'self'",
+].join('; ')
+
+function previewTokenFor(sessionToken) {
+  const record = sessions.get(sessionToken)
+  if (!record) throw new HttpError(401, 'Open MaxCode from its local address to start a session.', 'no_session')
+  if (!record.previewToken) {
+    record.previewToken = randomBytes(24).toString('base64url')
+    previewTokens.set(record.previewToken, sessionToken)
+  }
+  return record.previewToken
+}
+
+/** Serve one workspace file for the sandboxed preview. Auth is the token in the URL. */
+async function handlePreview(req, res, rawPath) {
+  const hostHeader = String(req.headers.host ?? '').toLowerCase()
+  if (!hostHeader || !allowedHosts().has(hostHeader)) {
+    throw new HttpError(403, 'MaxCode only answers requests addressed to localhost.', 'bad_host')
+  }
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    throw new HttpError(405, 'Method not allowed.', 'method_not_allowed')
+  }
+  const match = /^\/preview\/([A-Za-z0-9_-]{16,64})(\/.*)?$/.exec(rawPath)
+  if (!match) throw new HttpError(404, 'Not found.', 'not_found')
+  const sessionToken = previewTokens.get(match[1])
+  const record = sessionToken ? sessions.get(sessionToken) : null
+  if (!record || Date.now() - record.created > SESSION_TTL) {
+    previewTokens.delete(match[1])
+    throw new HttpError(401, 'This preview link expired. Reopen the preview from MaxCode.', 'preview_expired')
+  }
+  let relative
+  try {
+    relative = decodeURIComponent(match[2] ?? '/')
+  } catch {
+    throw new HttpError(400, 'That path is not valid.', 'invalid_path')
+  }
+  if (relative.endsWith('/')) relative += 'index.html'
+  let target = await resolveWorkspacePath(relative, { allowRoot: false })
+  let info = await stat(target.absolute).catch(() => null)
+  if (info?.isDirectory()) {
+    target = await resolveWorkspacePath(`${relative}/index.html`, { allowRoot: false })
+    info = await stat(target.absolute).catch(() => null)
+  }
+  if (!info?.isFile()) throw new HttpError(404, `Not found: ${relative}`, 'not_found')
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('Content-Security-Policy', PREVIEW_CSP)
+  streamFile(req, res, target.absolute, info.size, { 'Cache-Control': 'no-store' })
+}
+
 async function route(req, res) {
+  const rawPath = (req.url ?? '/').split('?')[0]
+  if (rawPath.startsWith('/preview/')) {
+    await handlePreview(req, res, rawPath)
+    return
+  }
   guardRequest(req)
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`)
   const pathname = url.pathname
@@ -747,6 +821,32 @@ async function route(req, res) {
       return
     }
 
+    if (pathname === '/api/preview/token' && method === 'GET') {
+      json(res, 200, { token: previewTokenFor(session.token) })
+      return
+    }
+
+    if (pathname === '/api/workspace/instructions' && method === 'GET') {
+      json(res, 200, await readProjectInstructions())
+      return
+    }
+
+    const checkpointRoute = /^\/api\/checkpoints\/([A-Za-z0-9_-]{1,120})(\/restore)?$/.exec(pathname)
+    if (checkpointRoute) {
+      const [, checkpointId, restore] = checkpointRoute
+      if (!restore && method === 'GET') {
+        const summary = await checkpointSummary(checkpointId)
+        if (!summary) throw new HttpError(404, 'This checkpoint has expired or does not exist.', 'checkpoint_missing')
+        json(res, 200, summary)
+        return
+      }
+      if (restore && method === 'POST') {
+        json(res, 200, await restoreCheckpoint(checkpointId))
+        return
+      }
+      throw new HttpError(405, 'Method not allowed.', 'method_not_allowed')
+    }
+
     if (pathname === '/api/workspace/root' && method === 'GET') {
       const root = await workspaceRoot()
       json(res, 200, { root, workspace: await workspacePayload() })
@@ -775,6 +875,7 @@ async function route(req, res) {
       }
       const result = await executeTool(name, body.args ?? {}, {
         mode: body.mode === 'plan' ? 'plan' : 'build',
+        checkpoint: typeof body.checkpoint === 'string' ? body.checkpoint : '',
       })
       json(res, 200, { name, result })
       return
@@ -831,6 +932,24 @@ async function route(req, res) {
 
   if (method !== 'GET' && method !== 'HEAD') {
     throw new HttpError(405, 'Method not allowed.', 'method_not_allowed')
+  }
+  if (pathname === '/preview-host.html') {
+    // Hosts model-written pages inside a sandboxed iframe (opaque origin: no cookies, no
+    // access to MaxCode). It needs CDN scripts and inline code, so it gets its own CSP.
+    res.removeHeader('X-Frame-Options')
+    res.setHeader(
+      'Content-Security-Policy',
+      [
+        "default-src 'none'",
+        "script-src * 'unsafe-inline' 'unsafe-eval' data: blob:",
+        "style-src * 'unsafe-inline' data:",
+        'img-src * data: blob:',
+        'media-src * data: blob:',
+        'font-src * data:',
+        'connect-src https: wss: data: blob:',
+        "frame-ancestors 'self'",
+      ].join('; '),
+    )
   }
   await serveStatic(req, res, DIST, pathname)
 }
@@ -932,7 +1051,7 @@ export async function stopDaemon() {
   const status = await daemonStatus()
   if (!status.running) {
     await rm(path.join(DATA_DIR, 'daemon.json'), { force: true })
-    return { stopped: false, reason: 'OpenSol is not running.' }
+    return { stopped: false, reason: 'MaxCode is not running.' }
   }
   try {
     process.kill(status.info.pid, 'SIGTERM')

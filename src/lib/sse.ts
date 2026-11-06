@@ -61,7 +61,7 @@ export function describeRequestError(error: unknown, providerName: string): stri
   if (error instanceof DOMException && error.name === 'AbortError') return 'Stopped.'
   if (error instanceof Error) {
     if (/daemon is not reachable|lost the connection/i.test(error.message)) {
-      return 'The local OpenSol daemon is not reachable. Start it with “npm start”, then try again.'
+      return 'The local MaxCode daemon is not reachable. Start it with “npm start”, then try again.'
     }
     if (/failed to fetch|networkerror|load failed/i.test(error.message)) {
       return `The local daemon could not reach ${providerName}. Check the network and the provider base URL, then try again.`

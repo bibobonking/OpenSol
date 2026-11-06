@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mascotMood, MASCOT_LABELS } from './mascot.ts'
+import { heliumMood, HELIUM_LABELS } from './helium.ts'
 
 const user = { id: 'u', role: 'user', content: 'hi', createdAt: 0 }
 const assistant = (patch) => ({
@@ -23,29 +23,29 @@ const tool = (status) => ({
 })
 
 test('no messages means Helium waves', () => {
-  assert.equal(mascotMood([], false), 'wave')
+  assert.equal(heliumMood([], false), 'wave')
 })
 
 test('reasoning while streaming is thinking', () => {
-  assert.equal(mascotMood([user, assistant({ reasoning: 'hmm' })], true), 'thinking')
+  assert.equal(heliumMood([user, assistant({ reasoning: 'hmm' })], true), 'thinking')
 })
 
 test('streaming with content is typing', () => {
-  assert.equal(mascotMood([user, assistant({ reasoning: 'hmm', content: 'so far' })], true), 'typing')
+  assert.equal(heliumMood([user, assistant({ reasoning: 'hmm', content: 'so far' })], true), 'typing')
 })
 
 test('an awaiting tool needs approval, a failed tool is an error', () => {
-  assert.equal(mascotMood([user, tool('awaiting')], true), 'alert')
-  assert.equal(mascotMood([user, tool('error')], false), 'error')
+  assert.equal(heliumMood([user, tool('awaiting')], true), 'alert')
+  assert.equal(heliumMood([user, tool('error')], false), 'error')
 })
 
 test('a finished answer is happy, a stopped answer is sleepy', () => {
-  assert.equal(mascotMood([user, assistant({ content: 'done' })], false), 'happy')
-  assert.equal(mascotMood([user, assistant({ stopped: true })], false), 'sleepy')
+  assert.equal(heliumMood([user, assistant({ content: 'done' })], false), 'happy')
+  assert.equal(heliumMood([user, assistant({ stopped: true })], false), 'sleepy')
 })
 
 test('every mood has a label', () => {
-  for (const mood of Object.keys(MASCOT_LABELS)) {
-    assert.ok(MASCOT_LABELS[mood])
+  for (const mood of Object.keys(HELIUM_LABELS)) {
+    assert.ok(HELIUM_LABELS[mood])
   }
 })

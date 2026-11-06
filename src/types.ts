@@ -1,5 +1,4 @@
 import type { ThemeId } from './lib/themes'
-import type { MascotId, MascotScope } from './lib/mascot'
 
 export type ApiFormat = 'openai' | 'anthropic' | 'gemini'
 
@@ -130,8 +129,6 @@ export interface AppSettings {
   tools: Record<ToolName, ToolSetting>
   skills: Skill[]
   theme: ThemeId
-  mascot: MascotId
-  mascotScope: MascotScope
   showTokenEstimate: boolean
   mode: AgentMode
   chatFontSize: number
