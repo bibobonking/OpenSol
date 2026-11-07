@@ -9,10 +9,8 @@ import {
   type KeyboardEvent,
 } from 'react'
 import {
-  Brain,
   Check,
   ChevronDown,
-  Cpu,
   FileText,
   FolderOpen,
   Globe2,
@@ -25,19 +23,18 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import type { Attachment, Effort } from '../types'
+import type { Attachment } from '../types'
 import { activeModelId, hasCredentials, useSettings } from '../store/settings'
 import { useActiveModel, useProviderModels } from '../store/models'
 import { useUi } from '../store/ui'
 import { useWorkspace } from '../store/workspace'
-import { effortLabel } from '../data/providers'
 import { effortOptions } from '../lib/reasoning'
 import { PERMISSION_MODES, permissionLabel, permissionMode, permissionTools } from '../lib/permissions'
 import { useClickOutside } from '../lib/hooks'
 import { cn, formatBytes, readFileAsDataUrl, readFileAsText } from '../lib/utils'
-import { ModelPicker } from './ModelPicker'
-import { Helium } from './Helium'
-import type { HeliumMood } from '../lib/helium'
+import { ModelDeck, ModelDeckTrigger } from './ModelDeck'
+import { PixleSol } from './PixleSol'
+import type { PixleMood } from '../lib/pixlesol'
 
 const TEXT_EXTENSIONS = /\.(txt|md|markdown|ts|tsx|js|jsx|mjs|cjs|json|css|scss|html|vue|svelte|py|go|rs|rb|java|kt|cs|c|h|cpp|hpp|php|swift|sh|bash|zsh|yml|yaml|toml|ini|sql|csv|xml|gitignore|env)$/i
 const MAX_ATTACHMENTS = 6
@@ -73,7 +70,7 @@ export function Composer({
   placeholder = 'How can I help you today?',
   contextPct,
   contextTitle,
-  heliumMood,
+  pixleMood,
 }: {
   value: string
   onChange: (value: string) => void
@@ -86,7 +83,7 @@ export function Composer({
   placeholder?: string
   contextPct?: number
   contextTitle?: string
-  heliumMood?: HeliumMood
+  pixleMood?: PixleMood
 }) {
   const settings = useSettings()
   const update = useSettings((state) => state.update)
@@ -108,6 +105,17 @@ export function Composer({
   const modelTriggerRef = useRef<HTMLButtonElement>(null)
   const permissionRef = useRef<HTMLDivElement>(null)
   const permissionTriggerRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault()
+        setPickerOpen((open) => !open)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useClickOutside(permissionRef, () => setPermissionOpen(false), permissionOpen, permissionTriggerRef)
 
@@ -341,7 +349,7 @@ export function Composer({
 
   return (
     <div className="relative w-full">
-      <ModelPicker open={pickerOpen && connected} onClose={() => setPickerOpen(false)} triggerRef={modelTriggerRef} />
+      <ModelDeck open={pickerOpen && connected} onClose={() => setPickerOpen(false)} />
 
       {commandMatches.length > 0 && (
         <div className="absolute bottom-[calc(100%+8px)] left-0 z-40 w-[min(94vw,360px)] overflow-hidden rounded-xl border border-line surface-lift shadow-float">
@@ -395,31 +403,12 @@ export function Composer({
           type="button"
           onClick={() => update({ webSearchEnabled: !settings.webSearchEnabled })}
           className={cn('chip h-7 gap-1.5 px-2.5 text-[11px]', settings.webSearchEnabled && 'chip-active')}
-          title="Allow MaxCode to search the web and read pages"
+          title="Allow OpenSol to search the web and read pages"
           aria-pressed={settings.webSearchEnabled}
         >
           <Globe2 size={12} />
           Search
         </button>
-        <label
-          className={cn('chip h-7 cursor-pointer gap-1 px-2', !efforts.length && 'cursor-not-allowed opacity-45')}
-          title={efforts.length ? 'Reasoning effort sent to the model' : 'This model advertises no effort levels'}
-        >
-          <Brain size={12} />
-          <select
-            value={settings.effort}
-            disabled={!efforts.length}
-            onChange={(event) => update({ effort: event.target.value as Effort })}
-            className="bg-transparent text-[11px] font-medium text-ink outline-none disabled:cursor-not-allowed"
-            aria-label="Reasoning effort"
-          >
-            {(efforts.length ? efforts : [settings.effort]).map((effort) => (
-              <option key={effort} value={effort}>
-                {effortLabel(effort)}
-              </option>
-            ))}
-          </select>
-        </label>
         {activeSkills > 0 && (
           <button
             type="button"
@@ -443,14 +432,14 @@ export function Composer({
         }}
         onDrop={onDrop}
         className={cn(
-          'surface-lift composer-shadow relative rounded-[26px] border transition-all duration-200',
+          'surface-lift composer-shadow relative rounded-2xl border transition-all duration-200',
           focused || dragging ? 'border-accent/35' : 'border-line',
           streaming && 'composer-glow border-accent/30',
           dragging && 'ring-4 ring-accent/10',
         )}
       >
         {focused && !dragging && (
-          <div className="pointer-events-none absolute inset-0 rounded-[26px] ring-4 ring-accent/[0.03]" aria-hidden="true" />
+          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-4 ring-accent/[0.03]" aria-hidden="true" />
         )}
 
         <div className="relative px-3.5 pb-1 pt-3">
@@ -505,7 +494,7 @@ export function Composer({
             onBlur={() => setFocused(false)}
             placeholder={placeholder}
             rows={1}
-            aria-label="Message MaxCode"
+            aria-label="Message OpenSol"
             className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15.5px] leading-[1.6] text-ink outline-none placeholder:text-faint"
             style={{ minHeight: 52, maxHeight: 220 }}
           />
@@ -519,7 +508,7 @@ export function Composer({
                 type="button"
                 onClick={() => setPermissionOpen((open) => !open)}
                 className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-muted transition-colors hover:bg-raised hover:text-ink"
-                title="Choose how much MaxCode can do without asking"
+                title="Choose how much OpenSol can do without asking"
                 aria-expanded={permissionOpen}
               >
                 <ShieldCheck size={13} className="text-faint" />
@@ -592,21 +581,16 @@ export function Composer({
                 {contextPct}%
               </span>
             )}
-            <button
-              ref={modelTriggerRef}
-              type="button"
+            <ModelDeckTrigger
+              triggerRef={modelTriggerRef}
+              label={modelLabel}
+              open={pickerOpen}
               disabled={!connected}
               onClick={() => setPickerOpen((open) => !open)}
-              className="flex h-8 max-w-[190px] items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-muted transition-colors hover:bg-raised hover:text-ink disabled:cursor-not-allowed disabled:opacity-45 sm:max-w-[260px]"
-              title={connected ? 'Choose model and reasoning effort' : 'Add a provider key in Settings first'}
-            >
-              <Cpu size={12} className="shrink-0 text-faint" />
-              <span className="truncate">{modelLabel}</span>
-              <ChevronDown
-                size={11}
-                className={cn('shrink-0 text-faint transition-transform duration-150', pickerOpen && 'rotate-180')}
-              />
-            </button>
+              efforts={efforts}
+              effort={settings.effort}
+              title={connected ? 'Model deck: choose model and reasoning effort (Ctrl M)' : 'Add a provider key in Settings first'}
+            />
             {streaming ? (
               <button
                 type="button"
@@ -640,18 +624,18 @@ export function Composer({
         </div>
 
         {dragging && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-[26px] border-2 border-dashed border-accent/45 bg-panel/95">
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-accent/45 bg-panel/95">
             <Upload size={18} className="text-accent" />
             <p className="text-[12px] font-medium text-ink">Drop files to attach</p>
             <p className="text-[10.5px] text-faint">Images up to 5 MB · text up to 512 KB</p>
           </div>
         )}
 
-        {heliumMood && (
-          <Helium
-            mood={heliumMood}
-            size={64}
-            className="pointer-events-none absolute -top-14 right-2 z-10 hidden drop-shadow-sm sm:inline-flex"
+        {pixleMood && (
+          <PixleSol
+            mood={pixleMood}
+            size={44}
+            className="pointer-events-none absolute -top-[34px] right-4 z-10 hidden sm:inline-flex"
           />
         )}
       </div>

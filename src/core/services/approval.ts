@@ -1,5 +1,6 @@
 import { Service, type Context } from 'cordis'
 import type { ToolExecutionContext, ToolPreExecuteResult } from '../types'
+import { resolveToolSetting } from '../mcp-tools'
 
 interface PendingApproval {
   toolCallId: string
@@ -18,7 +19,7 @@ export class ApprovalService extends Service {
 
     // Attach to tools/pre-execute waterfall gate
     this.ctx.on('tools/pre-execute', async (exec: ToolExecutionContext, next: () => Promise<ToolPreExecuteResult>) => {
-      const toolSetting = exec.settings.tools[exec.name]
+      const toolSetting = resolveToolSetting(exec.settings, exec.name)
       if (toolSetting?.approval === 'ask' && exec.callId) {
         const approved = await this.waitForApproval(exec.callId, exec.signal)
         if (!approved) {

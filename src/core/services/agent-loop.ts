@@ -8,6 +8,7 @@ import { getProviderName } from '../../data/providers'
 import { describeRequestError } from '../../lib/sse'
 import type { AdapterResult } from '../../agent/adapters/shared'
 import { createTurnQueue, lastUserMessageId } from '../../agent/queue'
+import { resolveToolSetting } from '../mcp-tools'
 import type { StepContext, StepResult, TurnResult } from '../types'
 
 const MAX_ROUNDS = 16
@@ -276,7 +277,7 @@ export class AgentLoopService extends Service {
 
         for (const call of result.toolCalls) {
           if (controller.signal.aborted) break
-          const toolSetting = settings.tools[call.name]
+          const toolSetting = resolveToolSetting(settings, call.name)
           if (!toolSetting?.enabled) {
             const message: ToolMessage = {
               id: createId('tool'),
@@ -332,6 +333,7 @@ export class AgentLoopService extends Service {
               status: output.isError ? 'error' : 'done',
               result: output.output,
               durationMs: Date.now() - toolStarted,
+              diff: output.diff,
             }
             this.ctx.sessions.updateMessage(sessionId, toolMessageId, finalToolMessage)
             toolMessages.push(finalToolMessage)

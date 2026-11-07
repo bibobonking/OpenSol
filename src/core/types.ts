@@ -2,6 +2,7 @@ import type {
   AgentMode,
   AppSettings,
   AssistantMessage,
+  FileDiff,
   Message,
   ModelInfo,
   ToolCall,
@@ -32,6 +33,8 @@ export interface ToolSchema {
 export interface ToolResult {
   output: string
   isError: boolean
+  /** Set by file tools so the UI can show +added / −removed lines. */
+  diff?: FileDiff
 }
 
 export interface ToolExecutionContext {
@@ -120,6 +123,7 @@ declare module 'cordis' {
     subagents: import('./services/subagents').SubagentService
     agentLoop: import('./services/agent-loop').AgentLoopService
     ui: import('./services/ui').UiService
+    titles: import('./services/titles').TitleService
   }
 
   interface Events {

@@ -1,42 +1,22 @@
 import { useEffect, useState } from 'react'
-import {
-  AlertCircle,
-  Bot,
-  Check,
-  ChevronDown,
-  Copy,
-  FilePenLine,
-  FilePlus2,
-  FileText,
-  FolderTree,
-  GitBranch,
-  Globe2,
-  Link2,
-  Search,
-  ShieldQuestion,
-  SquareTerminal,
-  X,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import type { ToolMessage, ToolName } from '../types'
+import { ArrowRight } from 'lucide-react'
+import type { FileDiff, ToolMessage, ToolName } from '../types'
 import { toolLabel, toolSummary } from '../agent/tools'
 import { resolveApproval } from '../agent/approval'
 import { useUi } from '../store/ui'
 import { cn } from '../lib/utils'
-import { Spinner } from './ui'
+import { diffLines, diffStats } from '../lib/diff'
+import { DiffBadge, DiffView } from './DiffView'
 
-const TOOL_ICONS: Record<ToolName, LucideIcon> = {
-  shell: SquareTerminal,
-  read_file: FileText,
-  list_files: FolderTree,
-  write_file: FilePlus2,
-  edit_file: FilePenLine,
-  rewrite_file: FilePenLine,
-  grep: Search,
-  web_search: Globe2,
-  read_url: Link2,
-  git: GitBranch,
-  subagent: Bot,
+const FILE_TOOLS = new Set(['write_file', 'edit_file', 'rewrite_file'])
+
+/** The diff the daemon reported, or one worked out from the call itself for older chats. */
+export function diffForTool(message: ToolMessage): FileDiff | undefined {
+  if (message.diff) return message.diff
+  if (message.status !== 'done' || message.call.name !== 'edit_file') return undefined
+  const { oldText, newText } = message.call.args
+  if (typeof oldText !== 'string' || typeof newText !== 'string') return undefined
+  return diffStats(diffLines(oldText, newText))
 }
 
 function statusMeta(status: ToolMessage['status']) {
@@ -62,22 +42,22 @@ function durationLabel(ms?: number) {
 function approvalCopy(name: ToolName) {
   switch (name) {
     case 'shell':
-      return 'MaxCode wants to run this command in the open workspace.'
+      return 'OpenSol wants to run this command in the open workspace.'
     case 'write_file':
-      return 'MaxCode wants to create or overwrite this file on disk.'
+      return 'OpenSol wants to create or overwrite this file on disk.'
     case 'edit_file':
     case 'rewrite_file':
-      return 'MaxCode wants to change this file on disk.'
+      return 'OpenSol wants to change this file on disk.'
     case 'git':
-      return 'MaxCode wants to change the Git state of this repository.'
+      return 'OpenSol wants to change the Git state of this repository.'
     case 'subagent':
-      return 'MaxCode wants to start a read-only subagent to investigate.'
+      return 'OpenSol wants to start a read-only subagent to investigate.'
     case 'web_search':
-      return 'MaxCode wants to search the web.'
+      return 'OpenSol wants to search the web.'
     case 'read_url':
-      return 'MaxCode wants to read this public page.'
+      return 'OpenSol wants to read this public page.'
     default:
-      return 'MaxCode wants to use this tool.'
+      return 'OpenSol wants to use this tool.'
   }
 }
 
@@ -86,9 +66,10 @@ export function ToolCallCard({ message, compact = false }: { message: ToolMessag
   const [copied, setCopied] = useState(false)
   const notify = useUi((state) => state.notify)
   const status = statusMeta(message.status)
-  const Icon = TOOL_ICONS[message.call.name] ?? SquareTerminal
   const summary = toolSummary(message.call.name, message.call.args)
   const args = message.call.args
+  const diff = diffForTool(message)
+  const isFileTool = FILE_TOOLS.has(message.call.name)
   const command = typeof args.command === 'string' ? args.command : ''
   const content =
     typeof args.content === 'string'
@@ -113,117 +94,92 @@ export function ToolCallCard({ message, compact = false }: { message: ToolMessag
     }
   }
 
-  return (
-    <div
-      className={cn(
-        'overflow-hidden rounded-xl border bg-panel transition-colors',
-        message.status === 'awaiting' ? 'border-warning/40' : 'border-line',
-        message.status === 'error' && 'border-danger/30',
-      )}
-    >
-      <div className="flex items-center gap-1.5 pr-2">
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left"
-          aria-expanded={open}
-        >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-raised text-muted">
-            <Icon size={13} strokeWidth={1.8} />
-          </span>
-          <span className="flex min-w-0 flex-1 items-baseline gap-2">
-            <span className="shrink-0 text-[12px] font-medium text-ink">{toolLabel(message.call.name)}</span>
-            <span className="truncate font-mono text-[11px] text-muted">{summary || '—'}</span>
-          </span>
-        </button>
-        <span className={cn('flex shrink-0 items-center gap-1.5 text-[10.5px] font-medium', status.className)}>
-          {message.status === 'running' ? (
-            <Spinner size={11} />
-          ) : (
-            <span className={cn('h-1.5 w-1.5 rounded-full', status.dot)} />
-          )}
-          <span className="hidden sm:inline">
-            {status.label}
-            {message.status === 'done' && message.durationMs !== undefined
-              ? ` · ${durationLabel(message.durationMs)}`
-              : ''}
-          </span>
-        </span>
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="icon-button h-7 w-7"
-          aria-label={open ? 'Collapse tool details' : 'Expand tool details'}
-        >
-          <ChevronDown size={14} className={cn('transition-transform duration-150', open && 'rotate-180')} />
-        </button>
-      </div>
+  const trailing =
+    message.status === 'done' && message.durationMs !== undefined
+      ? durationLabel(message.durationMs)
+      : message.status === 'done'
+        ? ''
+        : status.label.toLowerCase()
 
-      {message.status === 'running' && (
-        <div className="h-px w-full overflow-hidden bg-line">
-          <div className="h-full w-1/3 animate-shimmer bg-[linear-gradient(90deg,transparent,rgb(var(--accent)),transparent)] bg-[length:200%_100%]" />
-        </div>
-      )}
+  return (
+    <div className="animate-slideleft text-[12.5px]">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="group/row flex w-full min-w-0 items-baseline gap-1.5 py-[3px] text-left"
+        aria-expanded={open}
+      >
+        <ArrowRight
+          size={12}
+          strokeWidth={2}
+          className={cn(
+            'relative top-[1px] shrink-0 self-center text-faint transition-transform duration-200 ease-out group-hover/row:text-ink',
+            open && 'rotate-90',
+          )}
+        />
+        <span className="shrink-0 font-medium text-ink">{toolLabel(message.call.name)}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted">{summary || '—'}</span>
+        {isFileTool && diff && message.status === 'done' ? (
+          <DiffBadge added={diff.added} removed={diff.removed} line={diff.line} column={diff.column} className="shrink-0" />
+        ) : (
+          trailing && (
+            <span className={cn('shrink-0 text-[11px]', message.status === 'running' ? 'text-shimmer' : message.status === 'done' ? 'text-faint' : status.className)}>
+              {trailing}
+            </span>
+          )
+        )}
+      </button>
 
       {message.status === 'awaiting' && (
-        <div className="border-t border-warning/25 bg-warning/[0.045] px-3 py-2.5">
-          <div className="flex items-start gap-2">
-            <ShieldQuestion size={15} className="mt-0.5 shrink-0 text-warning" />
-            <p className="flex-1 text-[11.5px] leading-relaxed text-muted">{approvalCopy(message.call.name)}</p>
-          </div>
-          <div className="mt-2.5 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => resolveApproval(message.call.id, false)}
-              className="inline-flex h-7 items-center gap-1 rounded-lg border border-line bg-panel px-2.5 text-[11.5px] font-medium text-muted transition-colors hover:text-ink"
-            >
-              <X size={12} />
-              Deny
-            </button>
+        <div className="animate-fade py-1 pl-[18px]">
+          <p className="text-[12px] leading-relaxed text-warning">{approvalCopy(message.call.name)}</p>
+          <p className="mt-1 flex items-center gap-4 text-[12px] font-medium">
             <button
               type="button"
               onClick={() => resolveApproval(message.call.id, true)}
-              className="inline-flex h-7 items-center gap-1 rounded-lg bg-ink px-2.5 text-[11.5px] font-medium text-panel transition-opacity hover:opacity-85"
+              className="text-ink underline decoration-ink/30 underline-offset-[3px] transition-colors hover:decoration-ink"
             >
-              <Check size={12} />
-              Allow once
+              Allow once →
             </button>
-          </div>
+            <button
+              type="button"
+              onClick={() => resolveApproval(message.call.id, false)}
+              className="text-muted transition-colors hover:text-ink"
+            >
+              Deny
+            </button>
+          </p>
         </div>
       )}
 
       {open && (
-        <div className="border-t border-line">
-          {(command || content) && (
-            <div className="px-3 pt-2.5">
-              {command && <pre className="thin-scroll max-h-40 overflow-auto rounded-lg border border-line bg-raised/60 p-2.5 font-mono text-[11.5px] leading-relaxed text-ink">$ {command}</pre>}
-              {content && (
-                <pre className="thin-scroll mt-2 max-h-48 overflow-auto rounded-lg border border-line bg-raised/60 p-2.5 font-mono text-[11px] leading-relaxed text-muted">
-                  {content.length > 4000 ? `${content.slice(0, 4000)}\n… ${content.length - 4000} more characters` : content}
-                </pre>
-              )}
-            </div>
+        <div className="animate-fade space-y-2 pb-1.5 pl-[18px] pt-0.5">
+          {command && (
+            <pre className="thin-scroll max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11.5px] leading-relaxed text-ink">
+              $ {command}
+            </pre>
+          )}
+          {message.call.name === 'edit_file' && typeof args.oldText === 'string' && typeof args.newText === 'string' && (
+            <DiffView before={args.oldText} after={args.newText} startLine={diff?.line ?? 1} />
+          )}
+          {content && message.call.name !== 'edit_file' && (
+            <pre className="thin-scroll max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-muted">
+              {content.length > 4000 ? `${content.slice(0, 4000)}\n… ${content.length - 4000} more characters` : content}
+            </pre>
           )}
 
           {message.result !== undefined && (
-            <div className="px-3 pb-3 pt-2.5">
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="soft-label">{message.status === 'error' ? 'Error' : 'Output'}</span>
-                <button
-                  type="button"
-                  onClick={copyOutput}
-                  className="inline-flex items-center gap-1 text-[10.5px] font-medium text-faint transition-colors hover:text-ink"
-                >
-                  {copied ? <Check size={11} /> : <Copy size={11} />}
+            <div>
+              <p className="mb-1 flex items-center gap-3 text-[11px] text-faint">
+                <span>{message.status === 'error' ? 'Error' : 'Output'}</span>
+                <button type="button" onClick={copyOutput} className="transition-colors hover:text-ink">
                   {copied ? 'Copied' : 'Copy'}
                 </button>
-              </div>
+              </p>
               <pre
                 className={cn(
-                  'thin-scroll max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg border p-2.5 font-mono text-[11.5px] leading-[1.65]',
-                  message.status === 'error'
-                    ? 'border-danger/20 bg-danger/[0.04] text-danger'
-                    : 'border-line bg-raised/50 text-muted',
+                  'thin-scroll max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-[11.5px] leading-[1.65]',
+                  message.status === 'error' ? 'text-danger' : 'text-muted',
                 )}
               >
                 {message.result || '(no output)'}
@@ -232,10 +188,9 @@ export function ToolCallCard({ message, compact = false }: { message: ToolMessag
           )}
 
           {message.result === undefined && !command && !content && message.status !== 'awaiting' && (
-            <div className="flex items-center gap-2 px-3 py-3 text-[11.5px] text-muted">
-              {message.status === 'running' ? <Spinner size={12} /> : <AlertCircle size={12} />}
+            <p className="text-[11.5px] text-muted">
               {message.status === 'running' ? 'Working…' : 'No result was recorded.'}
-            </div>
+            </p>
           )}
         </div>
       )}

@@ -1,13 +1,12 @@
-import { useEffect } from 'react'
-import { AlertCircle, RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
 import { WorkspacePanel } from './components/WorkspacePanel'
 import { SettingsModal } from './components/SettingsModal'
 import { DeployModal } from './components/DeployModal'
 import { CommandPalette } from './components/CommandPalette'
-import { BrandFooter, LogoMark } from './components/Logo'
-import { ConfirmDialog, Spinner, ToastHost } from './components/ui'
+import { Splash } from './components/Splash'
+import { ConfirmDialog, ToastHost } from './components/ui'
 import { useSettings } from './store/settings'
 import { useModelSync } from './store/models'
 import { useUi } from './store/ui'
@@ -16,59 +15,7 @@ import { resolveTheme, themeIsDark } from './lib/themes'
 import { listInstalledPlugins } from './lib/daemon'
 import { syncPlugins } from './plugins'
 
-function BootScreen({
-  phase,
-  error,
-  onRetry,
-}: {
-  phase: 'idle' | 'loading' | 'ready' | 'error'
-  error: string
-  onRetry: () => void
-}) {
-  return (
-    <div className="relative flex h-dvh min-h-0 items-center justify-center overflow-hidden bg-canvas px-5">
-      <div className="hero-wash pointer-events-none absolute inset-0" aria-hidden="true" />
-      <div className="relative flex w-full max-w-[420px] flex-col items-center text-center">
-        <LogoMark size={46} />
-        <h1 className="mt-4 font-display text-[30px] font-medium tracking-[-0.03em] text-ink">MaxCode</h1>
-        {phase === 'error' ? (
-          <>
-            <div className="mt-5 w-full rounded-xl border border-danger/25 bg-danger/[0.045] px-4 py-3 text-left">
-              <p className="flex items-center gap-1.5 text-[12px] font-medium text-ink">
-                <AlertCircle size={14} className="text-danger" />
-                The local daemon did not answer
-              </p>
-              <p className="mt-1.5 whitespace-pre-wrap break-words text-[11px] leading-relaxed text-muted">{error}</p>
-            </div>
-            <button
-              type="button"
-              onClick={onRetry}
-              className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-full bg-ink px-4 text-[12px] font-medium text-panel transition-opacity hover:opacity-85"
-            >
-              <RefreshCw size={13} />
-              Try again
-            </button>
-            <p className="mt-3 text-[10.5px] leading-relaxed text-faint">
-              Start MaxCode with <code className="rounded bg-raised px-1 py-0.5 font-mono text-[10px]">npm start</code>{' '}
-              in the MaxCode folder, then reload this page.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.18em] text-faint">by DevSoft</p>
-            <p className="mt-5 flex items-center gap-2 text-[12.5px] text-muted">
-              <Spinner size={13} className="text-accent" />
-              Starting your local agent…
-            </p>
-          </>
-        )}
-        <div className="mt-10">
-          <BrandFooter />
-        </div>
-      </div>
-    </div>
-  )
-}
+const MIN_SPLASH_MS = 1600
 
 export default function App() {
   const phase = useBoot((state) => state.phase)
@@ -81,6 +28,22 @@ export default function App() {
   const setPaletteOpen = useUi((state) => state.setPaletteOpen)
 
   useModelSync()
+
+  // Keep the splash up for at least MIN_SPLASH_MS so the intro animation can play,
+  // then let it fade out over the app instead of cutting.
+  const [splash, setSplash] = useState<'show' | 'leaving' | 'gone'>('show')
+  useEffect(() => {
+    if (phase !== 'ready' || splash !== 'show') return
+    const started = useBoot.getState().startedAt || Date.now()
+    const wait = Math.max(0, MIN_SPLASH_MS - (Date.now() - started))
+    const t1 = window.setTimeout(() => setSplash('leaving'), wait)
+    return () => window.clearTimeout(t1)
+  }, [phase, splash])
+  useEffect(() => {
+    if (splash !== 'leaving') return
+    const t2 = window.setTimeout(() => setSplash('gone'), 520)
+    return () => window.clearTimeout(t2)
+  }, [splash])
 
   useEffect(() => {
     void boot()
@@ -103,9 +66,9 @@ export default function App() {
       root.classList.toggle('dark', themeIsDark(theme, media.matches))
       document
         .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', themeIsDark(theme, media.matches) ? '#262624' : '#faf9f5')
+        ?.setAttribute('content', themeIsDark(theme, media.matches) ? '#141413' : '#ffffff')
       try {
-        localStorage.setItem('maxcode.theme', theme)
+        localStorage.setItem('opensol.theme', theme)
       } catch {
         // Storage can be unavailable in private mode; the theme still applies.
       }
@@ -155,35 +118,35 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [setMobileSidebarOpen, setPaletteOpen])
 
-  if (phase !== 'ready') {
-    return (
-      <>
-        <BootScreen phase={phase} error={error} onRetry={() => void boot(true)} />
-        <ToastHost />
-      </>
-    )
-  }
+  const ready = phase === 'ready'
 
   return (
-    <div className="flex h-dvh min-h-0 overflow-hidden bg-panel text-ink">
-      <Sidebar />
-      {mobileSidebarOpen && (
-        <button
-          type="button"
-          aria-label="Close sidebar"
-          onClick={() => setMobileSidebarOpen(false)}
-          className="fixed inset-0 z-40 cursor-default bg-ink/25 backdrop-blur-[1px] lg:hidden"
-        />
+    <div className="flex h-dvh min-h-0 overflow-hidden bg-canvas text-ink">
+      {ready && (
+        <>
+          <Sidebar />
+          {mobileSidebarOpen && (
+            <button
+              type="button"
+              aria-label="Close sidebar"
+              onClick={() => setMobileSidebarOpen(false)}
+              className="modal-scrim fixed inset-0 z-40 cursor-default bg-black/30 backdrop-blur-[2px] lg:hidden"
+            />
+          )}
+          <div className="relative flex min-h-0 min-w-0 flex-1 bg-panel lg:my-1.5 lg:mr-1.5 lg:overflow-hidden lg:rounded-xl lg:border lg:border-line lg:shadow-pill">
+            <ChatView />
+            <WorkspacePanel />
+          </div>
+          <SettingsModal />
+          <DeployModal />
+          <CommandPalette />
+          <ConfirmDialog />
+        </>
       )}
-      <div className="relative flex min-h-0 min-w-0 flex-1">
-        <ChatView />
-        <WorkspacePanel />
-      </div>
-      <SettingsModal />
-      <DeployModal />
-      <CommandPalette />
-      <ConfirmDialog />
       <ToastHost />
+      {splash !== 'gone' && (
+        <Splash phase={phase} error={error} leaving={splash === 'leaving'} onRetry={() => void boot(true)} />
+      )}
     </div>
   )
 }

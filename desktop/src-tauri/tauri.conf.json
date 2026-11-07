@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenSol",
+  "version": "3.1.0",
+  "identifier": "dev.opensoft.opensol",
+  "build": {
+    "frontendDist": "../loading"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "OpenSol coding agent",
+    "longDescription": "OpenSol Desktop runs the OpenSol local daemon and shows the app in your operating system's own webview (WebKitGTK, WebView2 or WKWebView).",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/opensol-node"],
+    "resources": {
+      "../../dist": "app/dist",
+      "../../server": "app/server",
+      "../../shared": "app/shared",
+      "../../node_modules/fflate": "app/node_modules/fflate",
+      "../../package.json": "app/package.json"
+    },
+    "linux": {
+      "deb": { "depends": [] }
+    },
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": { "installMode": "currentUser" }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

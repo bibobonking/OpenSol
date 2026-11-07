@@ -49,7 +49,7 @@ export function buildSystemPrompt(settings: AppSettings, mode: AgentMode = setti
   chunks.push(
     [
       '## Workspace',
-      'You operate on the real folder below through the local MaxCode daemon. Tools return real output; never invent file contents, command results, URLs or deployments.',
+      'You operate on the real folder below through the local OpenSol daemon. Tools return real output; never invent file contents, command results, URLs or deployments.',
       workspaceContext(),
     ].join('\n\n'),
   )

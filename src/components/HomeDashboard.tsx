@@ -5,7 +5,7 @@ import { useSettings } from '../store/settings'
 import { useWorkspace } from '../store/workspace'
 import { cn } from '../lib/utils'
 import { computeUsage, formatTokens, shortModelName, type UsageRange } from '../lib/usage'
-import { Helium } from './Helium'
+import { PixleSol } from './PixleSol'
 
 const RANGES: Array<{ value: UsageRange; label: string }> = [
   { value: 'all', label: 'All' },
@@ -29,12 +29,12 @@ function heatLevel(count: number, busiest: number) {
 
 function Stat({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-xl bg-raised/55 px-3 py-2.5">
+    <div className="min-w-0 rounded-lg border border-line/70 bg-canvas px-3 py-2.5">
       <p className="flex items-center gap-1.5 text-[11.5px] text-muted">
         <Icon size={12} className="shrink-0 text-faint" />
         <span className="truncate">{label}</span>
       </p>
-      <p className="mt-0.5 truncate font-display text-[21px] font-medium tracking-[-0.01em] text-ink" title={value}>
+      <p className="mt-0.5 truncate text-[20px] font-semibold tracking-[-0.03em] text-ink" title={value}>
         {value}
       </p>
     </div>
@@ -47,11 +47,15 @@ export function HomeGreeting() {
   const home = daemon?.home ?? ''
   const name = home.split(/[\\/]/).filter(Boolean).pop() || workspace.name || 'there'
   return (
-    <div className="flex items-center justify-center gap-3 text-center">
-      <Helium mood="wave" size={46} />
-      <h1 className="font-display text-[32px] font-normal leading-tight tracking-[-0.02em] text-ink sm:text-[38px]">
-        What&apos;s up next, {name}?
+    <div className="flex flex-col items-center gap-4 text-center">
+      <div className="relative">
+        <span className="absolute inset-0 -z-10 m-auto h-16 w-16 rounded-full bg-accent/20 blur-2xl" aria-hidden="true" />
+        <PixleSol mood="wave" size={60} />
+      </div>
+      <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.035em] text-ink sm:text-[34px]">
+        What should we build, <span className="text-solar">{name}</span>?
       </h1>
+      <p className="-mt-2 text-[13.5px] text-muted">Local-first agent. Your folder, your keys, your machine.</p>
     </div>
   )
 }
@@ -74,16 +78,16 @@ export function HomeDashboard() {
 
   return (
     <div className="relative w-full">
-      <section className="relative overflow-hidden rounded-2xl border border-line/80 bg-transparent">
+      <section className="relative overflow-hidden rounded-xl border border-line bg-panel">
         <div className="relative flex flex-wrap items-center justify-between gap-2 border-b border-line/70 px-3 py-2.5">
-          <div className="inline-flex items-center rounded-lg bg-raised/70 p-0.5">
+          <div className="inline-flex items-center rounded-lg bg-raised p-0.5">
             {(['overview', 'models'] as const).map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setTab(value)}
                 className={cn(
-                  'h-7 rounded-[6px] px-2.5 text-[11.5px] font-medium capitalize transition-colors',
+                  'h-6 rounded-md px-2.5 text-[11.5px] font-medium capitalize transition-colors',
                   tab === value ? 'bg-panel text-ink shadow-pill' : 'text-muted hover:text-ink',
                 )}
               >
@@ -91,14 +95,14 @@ export function HomeDashboard() {
               </button>
             ))}
           </div>
-          <div className="inline-flex items-center gap-0.5 rounded-lg bg-raised/70 p-0.5">
+          <div className="inline-flex items-center gap-0.5 rounded-lg bg-raised p-0.5">
             {RANGES.map((entry) => (
               <button
                 key={entry.value}
                 type="button"
                 onClick={() => setRange(entry.value)}
                 className={cn(
-                  'h-7 rounded-[6px] px-2.5 text-[11.5px] font-medium transition-colors',
+                  'h-6 rounded-md px-2.5 text-[11.5px] font-medium transition-colors',
                   range === entry.value ? 'bg-panel text-ink shadow-pill' : 'text-muted hover:text-ink',
                 )}
               >

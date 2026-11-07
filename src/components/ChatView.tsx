@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Bug, FolderSearch, Gamepad2, Globe2, KeyRound, LayoutTemplate, ListChecks, Sparkles } from 'lucide-react'
+import { ArrowUp, Bug, FlaskConical, FolderSearch, Gamepad2, Globe2, KeyRound, LayoutTemplate, ListChecks, Sparkles } from 'lucide-react'
 import type { Attachment } from '../types'
 import { createId, useChats } from '../store/chats'
 import { activeModelId, hasCredentials, useSettings } from '../store/settings'
@@ -9,7 +9,7 @@ import { useWorkspace } from '../store/workspace'
 import { getProviderName } from '../data/providers'
 import { stopRun, runAgent } from '../agent'
 import { getContextUsage } from '../lib/context'
-import { heliumMood } from '../lib/helium'
+import { pixleMood } from '../lib/pixlesol'
 import { formatTokens } from '../lib/usage'
 import { groupConversationTurns } from '../lib/conversation'
 import { TopBar, type ChatViewMode } from './TopBar'
@@ -42,6 +42,12 @@ const STARTERS = [
     label: 'Audit this folder',
     prompt:
       'Audit this workspace. Read the key files first, then list the three most important improvements with file references and a short plan.',
+  },
+  {
+    icon: FlaskConical,
+    label: 'Write tests',
+    prompt:
+      'Find the least-tested, highest-risk module in this workspace, write focused tests for it, run them, and fix anything they reveal.',
   },
   {
     icon: Globe2,
@@ -83,7 +89,7 @@ export function ChatView() {
   const activeSkills = settings.skills.filter((skill) => skill.enabled).length
   const turns = groupConversationTurns(messages)
   const context = getContextUsage(messages, activeModel)
-  const mood = heliumMood(messages, streaming)
+  const mood = pixleMood(messages, streaming)
 
   const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
     const node = scrollRef.current
@@ -172,7 +178,7 @@ export function ChatView() {
       case 'search': {
         if (!args.trim()) {
           setDraft('/search ')
-          notify('Type what you want MaxCode to research.', 'info')
+          notify('Type what you want OpenSol to research.', 'info')
           focusComposer()
           return false
         }
@@ -194,7 +200,7 @@ export function ChatView() {
       case 'build': {
         setMode('build')
         if (!args.trim()) {
-          notify('Build mode is on: MaxCode can edit files and run commands.', 'info')
+          notify('Build mode is on: OpenSol can edit files and run commands.', 'info')
           focusComposer()
           return true
         }
@@ -245,17 +251,18 @@ export function ChatView() {
       {!session || messages.length === 0 ? (
         <div className="thin-scroll relative min-h-0 flex-1 overflow-y-auto">
           <div className="hero-wash pointer-events-none absolute inset-0" aria-hidden="true" />
+          <div className="bg-dots pointer-events-none absolute inset-0 opacity-70" aria-hidden="true" />
           <div className="relative mx-auto flex min-h-full w-full max-w-[720px] flex-col justify-center px-4 py-10 sm:px-6">
-            <div className="animate-rise">
+            <div className="animate-blurin">
               <HomeGreeting />
             </div>
 
-            <div className="mt-8 w-full animate-rise [animation-delay:80ms]">
+            <div className="mt-8 w-full animate-rise [animation-delay:120ms]">
               {(!connected || !selectedModel) && (
                 <button
                   type="button"
                   onClick={() => openSettings('models')}
-                  className="mb-3 flex w-full items-center gap-2 rounded-2xl border border-accent/25 bg-accent-soft/60 px-4 py-2.5 text-left text-[12.5px] font-medium text-accent transition-colors hover:bg-accent-soft"
+                  className="mb-3 flex w-full items-center gap-2 rounded-xl border border-accent/30 bg-accent-soft px-4 py-2.5 text-left text-[12.5px] font-medium text-accent transition-all hover:border-accent/50"
                 >
                   <KeyRound size={14} className="shrink-0" />
                   <span className="flex-1">{connected ? 'Choose a model to start' : 'Connect a provider to start'}</span>
@@ -272,18 +279,20 @@ export function ChatView() {
                 hints
                 autoFocus
                 placeholder={connected ? 'How can I help you today?' : 'Add a provider key to start'}
-                heliumMood={connected ? 'idle' : 'sleepy'}
+                pixleMood={connected ? 'idle' : 'sleepy'}
               />
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                {STARTERS.map((starter) => (
+              <div className="stagger mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {STARTERS.slice(0, 6).map((starter) => (
                   <button
                     key={starter.label}
                     type="button"
                     onClick={() => useStarter(starter.prompt)}
-                    className="inline-flex h-9 items-center gap-2 rounded-full border border-line/80 px-3.5 text-[12.5px] font-medium text-muted transition-colors hover:bg-raised/60 hover:text-ink"
+                    className="card-lift group/starter flex items-center gap-2.5 rounded-xl border border-line bg-panel px-3 py-2.5 text-left text-[12.5px] font-medium text-muted hover:text-ink"
                   >
-                    <starter.icon size={14} strokeWidth={1.7} className="text-faint" />
-                    {starter.label}
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-raised text-faint transition-colors duration-200 group-hover/starter:bg-accent-soft group-hover/starter:text-accent">
+                      <starter.icon size={14} strokeWidth={1.8} />
+                    </span>
+                    <span className="min-w-0 truncate">{starter.label}</span>
                   </button>
                 ))}
               </div>
@@ -300,7 +309,7 @@ export function ChatView() {
               </div>
             </div>
 
-            <div className="mt-10 animate-rise [animation-delay:160ms]">
+            <div className="mt-10 animate-rise [animation-delay:420ms]">
               <HomeDashboard />
             </div>
           </div>
@@ -323,7 +332,7 @@ export function ChatView() {
                 >
                   <div className="mx-auto w-full max-w-[760px] px-4 pb-12 pt-8 sm:px-6 sm:pt-10">
                     {turns.map((turn, index) => (
-                      <div key={turn.id} className={index === 0 ? '' : 'mt-10'}>
+                      <div key={turn.id} className={index === 0 ? 'animate-rise' : 'mt-10 animate-rise'}>
                         <TurnBlock
                           turn={turn}
                           sessionId={session.id}
@@ -343,7 +352,7 @@ export function ChatView() {
                       setAtBottom(true)
                       scrollToBottom('smooth')
                     }}
-                    className="surface-lift absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-line px-3.5 py-2 text-[11.5px] font-medium text-muted shadow-pill transition-colors hover:text-ink"
+                    className="surface-lift absolute bottom-4 left-1/2 -translate-x-1/2 animate-scalein rounded-full border border-line px-3.5 py-1.5 text-[11.5px] font-medium text-muted shadow-composer transition-colors hover:text-ink"
                   >
                     <span className="inline-flex items-center gap-1.5">
                       <ArrowUp size={11} />
@@ -367,7 +376,7 @@ export function ChatView() {
                 placeholder={connected ? 'How can I help you today?' : 'Add a provider key to start'}
                 contextPct={context.pct}
                 contextTitle={`Context: ~${formatTokens(context.used)} / ${formatTokens(context.limit)} tokens`}
-                heliumMood={mood}
+                pixleMood={mood}
               />
               <div className="mt-2 flex items-center justify-between gap-3 px-2 text-[11px] text-faint">
                 <span className="flex items-center gap-1">

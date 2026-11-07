@@ -209,7 +209,7 @@ export async function serveStatic(req, res, root, pathname) {
     info = await stat(target).catch(() => null)
   }
   if (!info?.isFile()) {
-    throw new HttpError(503, 'MaxCode is not built yet. Run the remote build and place the output in dist/.', 'dist_missing')
+    throw new HttpError(503, 'OpenSol is not built yet. Run the remote build and place the output in dist/.', 'dist_missing')
   }
 
   const ext = path.extname(target).toLowerCase()

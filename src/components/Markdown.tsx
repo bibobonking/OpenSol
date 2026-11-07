@@ -66,7 +66,7 @@ function PreviewFrame({ html, reloadKey, className }: { html: string; reloadKey:
       ref={frameRef}
       src="/preview-host.html"
       title="Live preview"
-      // No allow-same-origin: the page cannot reach MaxCode, its cookies or the local daemon.
+      // No allow-same-origin: the page cannot reach OpenSol, its cookies or the local daemon.
       sandbox="allow-scripts allow-pointer-lock allow-forms allow-modals"
       allow="fullscreen"
       className={cn('block h-full w-full border-0 bg-white', className)}

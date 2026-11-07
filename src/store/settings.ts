@@ -10,7 +10,7 @@ import type {
   SecretEntry,
   SecretsSummary,
   Skill,
-  ToolName,
+  BuiltinToolName,
   ToolSetting,
 } from '../types'
 import { BUILTIN_SKILLS } from '../data/skills'
@@ -25,7 +25,7 @@ import {
 import { defaultEffort, normalizeEffort } from '../lib/reasoning'
 import { normalizeTheme } from '../lib/themes'
 
-export const DEFAULT_SYSTEM_PROMPT = `You are MaxCode, a senior web engineer and coding agent built by DevSoft.
+export const DEFAULT_SYSTEM_PROMPT = `You are OpenSol, a senior web engineer and coding agent built by OpenSoft.
 
 You work directly in the user's open folder through a local daemon. The shell, file, git, search and deploy tools are real. Never describe tool output you did not receive.
 
@@ -47,7 +47,7 @@ Working loop:
 
 Never claim a check passed without running it. Ask only when a decision is genuinely ambiguous or destructive. Answer in the user's language. Cite web sources as links, and only when you actually read them.`
 
-const DEFAULT_TOOLS: Record<ToolName, ToolSetting> = {
+const DEFAULT_TOOLS: Record<BuiltinToolName, ToolSetting> = {
   shell: { enabled: true, approval: 'ask' },
   read_file: { enabled: true, approval: 'auto' },
   list_files: { enabled: true, approval: 'auto' },
@@ -79,6 +79,7 @@ const DEFAULTS: AppSettings = {
   chatFontSize: 15,
   workDetail: 'detailed',
   autoCollapseWork: true,
+  aiSessionTitles: true,
 }
 
 const EFFORTS = new Set<Effort>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
@@ -99,7 +100,7 @@ interface SettingsStore extends AppSettings {
   saveSearchKey: (apiKey: string) => Promise<void>
   saveDeployCredentials: (provider: DeployProviderId, fields: Record<string, string>) => Promise<void>
   refreshProviders: () => Promise<void>
-  updateTool: (tool: ToolName, patch: Partial<ToolSetting>) => void
+  updateTool: (tool: BuiltinToolName, patch: Partial<ToolSetting>) => void
   addSkill: (skill: Skill) => void
   updateSkill: (id: string, patch: Partial<Skill>) => void
   removeSkill: (id: string) => void
@@ -112,9 +113,9 @@ function notify(message: string, tone: 'info' | 'success' | 'error' = 'error') {
   window.dispatchEvent(new CustomEvent('maxcode:notice', { detail: { message, tone } }))
 }
 
-function mergeTools(saved?: Partial<Record<ToolName, Partial<ToolSetting>>>) {
-  const merged = {} as Record<ToolName, ToolSetting>
-  for (const key of Object.keys(DEFAULT_TOOLS) as ToolName[]) {
+function mergeTools(saved?: Partial<Record<BuiltinToolName, Partial<ToolSetting>>>) {
+  const merged = {} as Record<BuiltinToolName, ToolSetting>
+  for (const key of Object.keys(DEFAULT_TOOLS) as BuiltinToolName[]) {
     merged[key] = { ...DEFAULT_TOOLS[key], ...(saved?.[key] ?? {}) }
   }
   return merged
@@ -191,6 +192,7 @@ function buildSettings(persisted?: Partial<AppSettings>): AppSettings {
         : DEFAULTS.chatFontSize,
     workDetail: saved.workDetail === 'concise' ? 'concise' : 'detailed',
     autoCollapseWork: saved.autoCollapseWork !== false,
+    aiSessionTitles: saved.aiSessionTitles !== false,
   }
 }
 
@@ -219,6 +221,7 @@ function persistedPatch(patch: Partial<AppSettings>): Partial<AppSettings> {
     'chatFontSize',
     'workDetail',
     'autoCollapseWork',
+    'aiSessionTitles',
   ]
   for (const key of keys) {
     if (key in patch) out[key] = patch[key]

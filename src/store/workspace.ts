@@ -5,6 +5,7 @@ import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
   forgetWorkspace as forgetWorkspaceInDaemon,
+  removeWorkspaceFromList,
   getProjectInstructions,
   getWorkspaceTree,
   gitSummary as fetchGitSummary,
@@ -68,6 +69,7 @@ interface WorkspaceStore {
   deleteEntry: (path: string) => Promise<void>
   addWorkspace: (path: string) => Promise<void>
   forgetWorkspace: () => Promise<void>
+  removeWorkspace: (path: string) => Promise<void>
   loadGit: () => Promise<void>
   setActiveFile: (path: string | null) => void
 }
@@ -261,6 +263,30 @@ export const useWorkspace = create<WorkspaceStore>()((set, get) => ({
       if (!saved) return
     }
     const info = await forgetWorkspaceInDaemon()
+    set({
+      info,
+      root: '',
+      entries: [],
+      activeFile: null,
+      file: null,
+      content: '',
+      dirty: false,
+      git: EMPTY_GIT,
+      instructions: { file: '', content: '', truncated: false },
+    })
+  },
+
+  removeWorkspace: async (path) => {
+    const wasActive = get().info.root === path
+    if (wasActive && get().dirty) {
+      const saved = await get().saveFile()
+      if (!saved) return
+    }
+    const info = await removeWorkspaceFromList(path)
+    if (!wasActive) {
+      set({ info })
+      return
+    }
     set({
       info,
       root: '',

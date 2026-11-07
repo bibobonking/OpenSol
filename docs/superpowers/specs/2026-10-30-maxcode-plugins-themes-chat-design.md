@@ -1,24 +1,24 @@
-# MaxCode plugins, themes, and chat flow
+# OpenSol plugins, themes, and chat flow
 
 ## Intent
 
-Make MaxCode extensible through locally installed `.pluginmax` packages, improve
+Make OpenSol extensible through locally installed `.pluginmax` packages, improve
 the built-in themes and reasoning controls, and present each agent response as
 one coherent turn with tool activity grouped in place.
 
 ## Goals
 
 - Let users test a local plugin in a sandbox, then explicitly mark it Safe to
-  run its JavaScript in the MaxCode app realm.
+  run its JavaScript in the OpenSol app realm.
 - Support plugin JavaScript and CSS, an in-app way to package those sources as
   `.pluginmax`, local installation, enable/disable, and removal.
 - Let plugins contribute UI and workspace-oriented utilities through a
-  documented MaxCode API. Plugins declare network domains in their manifest;
+  documented OpenSol API. Plugins declare network domains in their manifest;
   users review those declarations at install/activation.
 - Add Night owl, Claude code, and Flame themes; make Light black-and-white and
   Dark neutral near-black, without the current brown palette.
 - Replace DeepThink with the provider/model-supported effort control.
-- Remove the MaxCode avatar beside its assistant messages, without changing
+- Remove the OpenSol avatar beside its assistant messages, without changing
   other identities/icons.
 - Render one assistant response per user turn. Keep each tool batch as a
   compact Used group in its chronological position; show another group if the
@@ -28,7 +28,7 @@ one coherent turn with tool activity grouped in place.
 
 - A remote plugin marketplace, automatic plugin downloads, or installing
   packages from a registry.
-- Rewriting or recompiling MaxCode's React source from a plugin.
+- Rewriting or recompiling OpenSol's React source from a plugin.
 - Giving plugins unrestricted shell or arbitrary access to files outside the
   active workspace.
 - Changing provider protocol history or the existing tool approval policy.
@@ -63,7 +63,7 @@ one coherent turn with tool activity grouped in place.
 2. **Same-realm trusted plugins with workspace APIs (selected):** sandbox for
    preview; explicit Safe activation runs JS in the app realm. The supported
    API exposes UI contributions and workspace-scoped functions, and network
-   access is declared and mediated by MaxCode. This best matches the request,
+   access is declared and mediated by OpenSol. This best matches the request,
    with a clear trust warning and no promise of resistance to malicious code
    after Safe.
 3. **Unrestricted OS-process plugins:** broad machine access, but conflicts
@@ -81,7 +81,7 @@ one coherent turn with tool activity grouped in place.
   downloads.
 - Add an in-app plugin builder that accepts a plugin manifest plus JS/CSS
   sources and exports `.pluginmax`; installation accepts a local file only.
-- Store installed plugin files and trust/enable state under the MaxCode data
+- Store installed plugin files and trust/enable state under the OpenSol data
   directory, not inside the selected project workspace.
 - Plugin manager shows identity, declared domains, requested capabilities, and
   current state. New plugins start disabled and sandboxed for testing. A
@@ -123,11 +123,11 @@ one coherent turn with tool activity grouped in place.
 
 - Keep the raw assistant/tool message sequence and round IDs needed by model
   adapters. Build a view-level turn representation between user messages:
-  combine assistant text/reasoning into one MaxCode response and place each
+  combine assistant text/reasoning into one OpenSol response and place each
   contiguous tool batch at its chronological position as a separate Used
   group. A tool-only round must not create an empty assistant bubble.
 - Keep streaming, approvals, stop/cancel, errors, retry, and tool result
-  ordering attached to the correct user turn. Remove only the MaxCode assistant
+  ordering attached to the correct user turn. Remove only the OpenSol assistant
   avatar, not unrelated provider or workspace icons.
 - Treat back-to-back user submissions during an active run as a separate
   queue. Process queued user turns sequentially, with each agent run limited to

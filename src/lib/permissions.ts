@@ -1,4 +1,4 @@
-import type { AppSettings, ToolName, ToolSetting } from '../types'
+import type { AppSettings, BuiltinToolName, ToolSetting } from '../types'
 
 export type PermissionMode = 'ask' | 'accept-edits' | 'full'
 
@@ -20,8 +20,8 @@ export const PERMISSION_MODES: Array<{ value: PermissionMode; label: string; des
   },
 ]
 
-const WRITE_TOOLS: ToolName[] = ['write_file', 'edit_file', 'rewrite_file']
-const GUARDED_TOOLS: ToolName[] = ['shell', 'git', 'subagent']
+const WRITE_TOOLS: BuiltinToolName[] = ['write_file', 'edit_file', 'rewrite_file']
+const GUARDED_TOOLS: BuiltinToolName[] = ['shell', 'git', 'subagent']
 
 export function permissionMode(tools: AppSettings['tools']): PermissionMode {
   const writesAuto = WRITE_TOOLS.every((tool) => tools[tool]?.approval === 'auto')
@@ -34,9 +34,9 @@ export function permissionMode(tools: AppSettings['tools']): PermissionMode {
 export function permissionTools(
   tools: AppSettings['tools'],
   mode: PermissionMode,
-): Record<ToolName, ToolSetting> {
-  const next = {} as Record<ToolName, ToolSetting>
-  for (const key of Object.keys(tools) as ToolName[]) {
+): Record<BuiltinToolName, ToolSetting> {
+  const next = {} as Record<BuiltinToolName, ToolSetting>
+  for (const key of Object.keys(tools) as BuiltinToolName[]) {
     const mutating = WRITE_TOOLS.includes(key) || GUARDED_TOOLS.includes(key)
     const approval: ToolSetting['approval'] =
       mode === 'full'

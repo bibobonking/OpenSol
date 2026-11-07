@@ -2,15 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Pencil,
   AlertCircle,
-  Brain,
   Check,
-  ChevronDown,
   Copy,
   FileText,
   RefreshCw,
   Settings2,
   Square,
-  Undo2,
 } from 'lucide-react'
 import type { AssistantMessage, ToolMessage, UserMessage } from '../types'
 import type { ConversationTurn } from '../lib/conversation'
@@ -24,9 +21,10 @@ import { createId, useChats } from '../store/chats'
 import { toolLabel } from '../agent/tools'
 import { formatBytes, cn } from '../lib/utils'
 import { Markdown } from './Markdown'
-import { ToolCallCard } from './ToolCallCard'
+import { ToolCallCard, diffForTool } from './ToolCallCard'
+import { DiffBadge } from './DiffView'
+import { ArrowRight } from 'lucide-react'
 import { LogoMark } from './Logo'
-import { Helium } from './Helium'
 
 function formatTokens(value?: number) {
   if (!value) return ''
@@ -64,7 +62,7 @@ function UserBubble({
   if (editing) {
     return (
       <div className="flex justify-end">
-        <div className="w-full max-w-[88%] rounded-[22px] border border-accent/30 bg-raised/60 p-2.5 sm:max-w-[82%]">
+        <div className="w-full max-w-[88%] rounded-2xl border border-accent/40 bg-canvas p-2.5 sm:max-w-[82%]">
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -134,7 +132,7 @@ function UserBubble({
             ))}
           </div>
         )}
-        <div className="rounded-[22px] bg-raised/80 px-4 py-3">
+        <div className="rounded-2xl rounded-br-md border border-line/70 bg-canvas px-4 py-2.5">
           {files.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {files.map((file) => (
@@ -171,7 +169,15 @@ function changedFiles(tools: ToolMessage[]): string[] {
 }
 
 /** Lets the person roll back every file the agent wrote or edited during one turn. */
-function UndoBar({ turnId, files }: { turnId: string; files: string[] }) {
+function UndoBar({
+  turnId,
+  files,
+  diff,
+}: {
+  turnId: string
+  files: string[]
+  diff: { added: number; removed: number } | null
+}) {
   const askConfirm = useUi((state) => state.askConfirm)
   const notify = useUi((state) => state.notify)
   const [state, setState] = useState<'idle' | 'working' | 'undone'>('idle')
@@ -203,23 +209,65 @@ function UndoBar({ turnId, files }: { turnId: string; files: string[] }) {
   }
 
   return (
-    <div className="mt-1 flex items-center gap-2 rounded-xl border border-line/70 px-3 py-2 text-[12.5px] text-muted">
-      <span className="min-w-0 flex-1 truncate">
+    <p className="flex items-baseline gap-2 text-[12.5px] text-muted">
+      <span className="min-w-0 truncate">
         {state === 'undone' ? 'Changes undone' : `Changed ${shown}${rest > 0 ? ` and ${rest} more` : ''}`}
       </span>
+      {state !== 'undone' && diff && <DiffBadge added={diff.added} removed={diff.removed} className="shrink-0" />}
       {state !== 'undone' && (
         <button
           type="button"
           onClick={() => void undo()}
           disabled={state === 'working'}
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 font-medium text-ink transition-colors hover:bg-raised disabled:opacity-50"
+          className="shrink-0 font-medium text-ink underline decoration-ink/30 underline-offset-[3px] transition-colors hover:decoration-ink disabled:opacity-50"
         >
-          <Undo2 size={13} strokeWidth={1.8} />
-          Undo
+          {state === 'working' ? 'Undoing…' : 'Undo'}
         </button>
+      )}
+    </p>
+  )
+}
+
+function ThoughtToggle({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="group/think flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[12px]"
+        aria-expanded={open}
+      >
+        <ArrowRight
+          size={11}
+          strokeWidth={2}
+          className={cn('relative top-[1px] shrink-0 self-center text-faint transition-transform duration-200 ease-out', open && 'rotate-90')}
+        />
+        <span className="shrink-0 font-medium text-muted group-hover/think:text-ink">Thought</span>
+        {!open && <span className="min-w-0 truncate text-[11px] text-faint">{text.replace(/\s+/g, ' ').trim().slice(0, 100)}</span>}
+      </button>
+      {open && (
+        <div className="thin-scroll animate-fade max-h-40 overflow-y-auto whitespace-pre-wrap pl-[17px] font-mono text-[11px] leading-relaxed text-faint">
+          {text}
+        </div>
       )}
     </div>
   )
+}
+
+function totalDiff(tools: ToolMessage[]) {
+  let added = 0
+  let removed = 0
+  let any = false
+  for (const tool of tools) {
+    if (!FILE_EDIT_TOOLS.has(tool.call.name)) continue
+    const diff = diffForTool(tool)
+    if (!diff) continue
+    any = true
+    added += diff.added
+    removed += diff.removed
+  }
+  return any ? { added, removed } : null
 }
 
 export function TaskCompletedBox({
@@ -264,65 +312,53 @@ export function TaskCompletedBox({
   ].sort((a, b) => a.time - b.time)
 
   return (
-    <div className="my-1.5 overflow-hidden rounded-2xl border border-line/80 bg-transparent">
+    <div className="my-1">
       <button
         type="button"
         onClick={() => {
           autoOpened.current = false
           setOpen((value) => !value)
         }}
-        className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-raised/40"
+        className="group/task flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[13px]"
         aria-expanded={open}
       >
-        {awaiting ? (
-          <Helium mood="alert" size={26} />
-        ) : active ? (
-          <Helium mood="working" size={26} />
-        ) : failed > 0 ? (
-          <Helium mood="error" size={26} />
-        ) : (
-          <Helium mood="happy" size={26} />
-        )}
-
-        <div className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className={cn('text-[12.5px] font-medium', awaiting ? 'text-warning' : 'text-ink')}>
-            {awaiting ? 'Action required' : active ? 'Running task…' : 'Task completed'}
-          </span>
-          <span className="truncate text-[11px] text-faint">
-            {tools.length > 0 && `Used ${tools.length} tool${tools.length === 1 ? '' : 's'}`}
-            {summary ? ` (${summary})` : ''}
-          </span>
-        </div>
-
-        {failed > 0 && (
-          <span className="shrink-0 rounded-full bg-danger/10 px-1.5 py-0.5 text-[9.5px] font-medium text-danger">
-            {failed} failed
-          </span>
-        )}
-
-        <div className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-faint">
-          <span className="hidden sm:inline">{open ? 'Hide' : 'Expand'}</span>
-          <ChevronDown
-            size={14}
-            className={cn('text-faint transition-transform duration-150', open && 'rotate-180')}
-          />
-        </div>
+        <ArrowRight
+          size={13}
+          strokeWidth={2}
+          className={cn(
+            'relative top-[1px] shrink-0 self-center text-faint transition-transform duration-200 ease-out group-hover/task:text-ink',
+            open && 'rotate-90',
+          )}
+        />
+        <span
+          className={cn(
+            'shrink-0 font-medium transition-colors',
+            awaiting ? 'text-warning' : active ? 'text-shimmer' : 'text-ink/80 group-hover/task:text-ink',
+          )}
+        >
+          {awaiting ? 'Action required' : active ? 'Running task…' : 'Task completed'}
+        </span>
+        <span className="min-w-0 truncate text-[12px] text-faint">
+          {tools.length > 0 && `Used ${tools.length} tool${tools.length === 1 ? '' : 's'}`}
+          {summary ? ` (${summary})` : ''}
+        </span>
+        {failed > 0 && <span className="shrink-0 text-[12px] text-danger">· {failed} failed</span>}
+        {(() => {
+          const total = totalDiff(tools)
+          return total ? <DiffBadge added={total.added} removed={total.removed} className="shrink-0 text-[11.5px]" /> : null
+        })()}
       </button>
 
       {open && (
-        <div className="space-y-2 border-t border-line/60 bg-raised/20 p-2.5">
+        <div className="animate-fade space-y-0.5 pb-1 pl-[19px] pt-1">
           {taskItems.map((item) =>
             item.kind === 'tool' ? (
               <ToolCallCard key={item.tool.id} message={item.tool} compact={!detailed} />
             ) : (
-              <div key={item.message.id} className="rounded-xl border border-line/60 bg-panel p-2.5">
-                {item.message.reasoning.trim() && (
-                  <div className="thin-scroll max-h-40 overflow-y-auto whitespace-pre-wrap font-mono text-[10.5px] leading-relaxed text-muted">
-                    {item.message.reasoning}
-                  </div>
-                )}
+              <div key={item.message.id} className="py-1">
+                {item.message.reasoning.trim() && <ThoughtToggle text={item.message.reasoning} />}
                 {item.message.content.trim() && (
-                  <div className="mt-1 text-[12px] leading-relaxed text-ink">
+                  <div className="mt-1 text-[12.5px] leading-relaxed text-muted">
                     <Markdown content={item.message.content} />
                   </div>
                 )}
@@ -345,11 +381,14 @@ export function AssistantBlock({
   streaming,
   isLastAssistant,
   showHeader,
+  turnUsage,
 }: {
   message: AssistantMessage
   sessionId: string
   streaming: boolean
   isLastAssistant: boolean
+  /** Summed token usage of every round in the turn (shown on the final answer). */
+  turnUsage?: { input: number; output: number }
   /** Only the first answer of a turn repeats the assistant header. */
   showHeader: boolean
 }) {
@@ -360,14 +399,17 @@ export function AssistantBlock({
     message.provider ? state.byProvider[message.provider] : undefined,
   )
   const [copied, setCopied] = useState(false)
-  const [reasoningOpen, setReasoningOpen] = useState(streaming)
+  // Thoughts stay closed until the person opens them, even while the model is still thinking.
+  const [reasoningOpen, setReasoningOpen] = useState(false)
   const hasBody = Boolean(message.content.trim() || message.reasoning.trim() || message.error)
   const modelName =
     providerModels?.find((model) => model.id === message.model)?.name ?? message.model ?? ''
   const needsConfig = Boolean(message.error && /api key|base url|settings|credential|403|401/i.test(message.error))
   const tokenBits: string[] = []
-  if (message.usage?.input) tokenBits.push(`${formatTokens(message.usage.input)} in`)
-  if (message.usage?.output) tokenBits.push(`${formatTokens(message.usage.output)} out`)
+  const usedInput = turnUsage?.input || message.usage?.input
+  const usedOutput = turnUsage?.output || message.usage?.output
+  if (usedInput) tokenBits.push(`${formatTokens(usedInput)} in`)
+  if (usedOutput) tokenBits.push(`${formatTokens(usedOutput)} out`)
   else if (showTokenEstimate && message.content.trim()) {
     tokenBits.push(`~${formatTokens(Math.ceil(message.content.length / 4))} out`)
   }
@@ -378,10 +420,6 @@ export function AssistantBlock({
   ]
     .filter(Boolean)
     .join(' · ')
-
-  useEffect(() => {
-    if (streaming) setReasoningOpen(true)
-  }, [streaming])
 
   const copy = async () => {
     try {
@@ -399,7 +437,7 @@ export function AssistantBlock({
         <div className="min-w-0">
           {showHeader && (
             <div className="flex items-center gap-2 text-[12px] font-semibold text-ink">
-              MaxCode
+              OpenSol
               {modelName && <span className="font-normal text-faint">{modelName}</span>}
             </div>
           )}
@@ -426,7 +464,7 @@ export function AssistantBlock({
             {showHeader && (
               <>
                 <LogoMark size={15} />
-                <span className="text-[12px] font-medium text-muted">MaxCode</span>
+                <span className="text-[12px] font-medium text-muted">OpenSol</span>
                 {modelName && <span className="truncate text-[11.5px] text-faint">{modelName}</span>}
               </>
             )}
@@ -440,28 +478,32 @@ export function AssistantBlock({
         )}
 
         {message.reasoning.trim() && (
-          <div className="mt-1 overflow-hidden rounded-xl border border-line/60">
+          <div className="mt-1">
             <button
               type="button"
               onClick={() => setReasoningOpen((value) => !value)}
-              className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-raised/40"
+              className="group/think flex max-w-full items-baseline gap-1.5 py-0.5 text-left text-[12.5px]"
               aria-expanded={reasoningOpen}
             >
-              <Brain size={12} className="text-faint" />
-              <span className="shrink-0 text-[11.5px] font-medium text-muted">
-                {streaming ? 'Thinking' : 'Thought'}
-              </span>
-              {streaming && <span className="animate-pulse text-accent">…</span>}
-              <span className="min-w-0 flex-1 truncate text-left text-[10.5px] text-faint">
-                {message.reasoning.replace(/\s+/g, ' ').trim().slice(0, 120)}
-              </span>
-              <ChevronDown
+              <ArrowRight
                 size={12}
-                className={cn('shrink-0 text-faint transition-transform', reasoningOpen && 'rotate-180')}
+                strokeWidth={2}
+                className={cn(
+                  'relative top-[1px] shrink-0 self-center text-faint transition-transform duration-200 ease-out group-hover/think:text-ink',
+                  reasoningOpen && 'rotate-90',
+                )}
               />
+              <span className={cn('shrink-0 font-medium', streaming ? 'text-shimmer' : 'text-muted group-hover/think:text-ink')}>
+                {streaming ? 'Thinking…' : 'Thought'}
+              </span>
+              {!reasoningOpen && (
+                <span className="min-w-0 truncate text-[11.5px] text-faint">
+                  {message.reasoning.replace(/\s+/g, ' ').trim().slice(0, 120)}
+                </span>
+              )}
             </button>
             {reasoningOpen && (
-              <div className="thin-scroll max-h-72 overflow-y-auto border-t border-line/60 px-3 py-2.5 whitespace-pre-wrap break-words font-mono text-[11px] leading-[1.65] text-muted">
+              <div className="thin-scroll animate-fade max-h-72 overflow-y-auto whitespace-pre-wrap break-words py-1 pl-[18px] font-mono text-[11px] leading-[1.65] text-faint">
                 {message.reasoning}
               </div>
             )}
@@ -543,7 +585,7 @@ export function AssistantBlock({
                 <RefreshCw size={14} strokeWidth={1.7} />
               </button>
             )}
-            <span className="ml-2">{metaLine}</span>
+            <span className="ml-2 tabular-nums text-muted">{metaLine}</span>
           </div>
         )}
       </div>
@@ -588,7 +630,7 @@ export function TurnBlock({
         {turn.user && <UserBubble message={turn.user} sessionId={sessionId} canEdit={!streaming} />}
         {turn.segments.map((segment, index) =>
           segment.kind === 'tools' ? (
-            <div key={`tools-${index}`} className="space-y-1.5">
+            <div key={`tools-${index}`} className="space-y-0.5">
               {segment.tools.map((tool) => (
                 <ToolCallCard key={tool.id} message={tool} />
               ))}
@@ -631,6 +673,10 @@ export function TurnBlock({
   // Finished turn: fold the tool calls and intermediate steps into one
   // collapsible "Task completed" block; the final answer stays outside.
   const intermediateAssistants = assistantMessages.slice(0, -1)
+  const turnUsage = assistantMessages.reduce(
+    (sum, item) => ({ input: sum.input + (item.usage?.input ?? 0), output: sum.output + (item.usage?.output ?? 0) }),
+    { input: 0, output: 0 },
+  )
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -646,11 +692,12 @@ export function TurnBlock({
           streaming={false}
           isLastAssistant={finalAssistant.id === lastAssistantId}
           showHeader={true}
+          turnUsage={turnUsage}
         />
       )}
 
       {turn.user && changedFiles(allTools).length > 0 && (
-        <UndoBar turnId={turn.user.id} files={changedFiles(allTools)} />
+        <UndoBar turnId={turn.user.id} files={changedFiles(allTools)} diff={totalDiff(allTools)} />
       )}
     </div>
   )

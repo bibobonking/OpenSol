@@ -100,7 +100,7 @@ export async function resolveWorkspacePath(input, { allowRoot = true } = {}) {
     throw new HttpError(403, 'That path is outside the open workspace.', 'outside_workspace')
   }
   if (/^(.*\/)?\.git(\/|$)/.test(rel)) {
-    throw new HttpError(403, 'MaxCode does not edit the .git directory.', 'git_protected')
+    throw new HttpError(403, 'OpenSol does not edit the .git directory.', 'git_protected')
   }
   const absolute = await insideRoot(root, candidate)
   return { root, absolute, relative: rel || '.' }
@@ -207,15 +207,58 @@ export async function readWorkspaceFile(input, { maxBytes = MAX_READ } = {}) {
   }
 }
 
+
+/** Line-level diff counts (LCS) used to report +added / -removed after a file change. */
+export function lineDiffStats(before, after) {
+  if (before === after) return { added: 0, removed: 0 }
+  const a = before === '' ? [] : before.split('\n')
+  const b = after === '' ? [] : after.split('\n')
+  let start = 0
+  while (start < a.length && start < b.length && a[start] === b[start]) start += 1
+  let endA = a.length
+  let endB = b.length
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA -= 1
+    endB -= 1
+  }
+  const x = a.slice(start, endA)
+  const y = b.slice(start, endB)
+  if (x.length === 0 || y.length === 0 || x.length * y.length > 4_000_000) {
+    return { added: y.length, removed: x.length }
+  }
+  let previous = new Uint32Array(y.length + 1)
+  for (let i = 1; i <= x.length; i += 1) {
+    const row = new Uint32Array(y.length + 1)
+    for (let j = 1; j <= y.length; j += 1) {
+      row[j] = x[i - 1] === y[j - 1] ? previous[j - 1] + 1 : Math.max(previous[j], row[j - 1])
+    }
+    previous = row
+  }
+  const common = previous[y.length]
+  return { added: y.length - common, removed: x.length - common }
+}
+
+/** 1-based line and column of a character offset. */
+function positionOf(text, offset) {
+  const head = text.slice(0, offset)
+  const line = head.split('\n').length
+  const column = offset - (head.lastIndexOf('\n') + 1) + 1
+  return { line, column }
+}
+
 export async function writeWorkspaceFile(input, content, { create = true } = {}) {
   const { root, absolute, relative } = await resolveWorkspacePath(input, { allowRoot: false })
   if (typeof content !== 'string') throw new HttpError(400, 'File content must be text.', 'bad_content')
   if (Buffer.byteLength(content, 'utf8') > MAX_WRITE) {
-    throw new HttpError(413, 'That file is too large to write from MaxCode.', 'file_too_large')
+    throw new HttpError(413, 'That file is too large to write from OpenSol.', 'file_too_large')
   }
   const existing = await stat(absolute).catch(() => null)
   if (!existing && !create) throw new HttpError(404, `File not found: ${relative}`, 'not_found')
   if (existing?.isDirectory()) throw new HttpError(400, `${relative} is a folder.`, 'is_directory')
+  let previousText = ''
+  if (existing && existing.size <= MAX_READ) {
+    previousText = await readFile(absolute, 'utf8').catch(() => '')
+  }
   await mkdir(path.dirname(absolute), { recursive: true })
   const temp = `${absolute}.${process.pid}.maxcode.tmp`
   await writeFile(temp, content, 'utf8')
@@ -235,7 +278,15 @@ export async function writeWorkspaceFile(input, content, { create = true } = {})
     created: !existing,
     bytes: info.size,
     hash: snapshot(Buffer.from(content, 'utf8')).hash,
+    diff: { ...lineDiffStats(previousText, content), ...positionOfFirstChange(previousText, content) },
   }
+}
+
+function positionOfFirstChange(before, after) {
+  let index = 0
+  const limit = Math.min(before.length, after.length)
+  while (index < limit && before[index] === after[index]) index += 1
+  return positionOf(after, index)
 }
 
 export async function editWorkspaceFile(input, oldText, newText, { replaceAll = false } = {}) {
@@ -261,7 +312,14 @@ export async function editWorkspaceFile(input, oldText, newText, { replaceAll = 
     ? file.content.split(oldText).join(newText)
     : file.content.replace(oldText, () => newText)
   const written = await writeWorkspaceFile(input, next)
-  return { ...written, replacements: replaceAll ? occurrences : 1 }
+  const count = replaceAll ? occurrences : 1
+  const per = lineDiffStats(oldText, newText)
+  const first = positionOf(file.content, file.content.indexOf(oldText))
+  return {
+    ...written,
+    replacements: count,
+    diff: { added: per.added * count, removed: per.removed * count, line: first.line, column: first.column },
+  }
 }
 
 export async function createWorkspaceEntry(input, type = 'file', content = '') {
@@ -672,7 +730,7 @@ async function duckduckgo(query, signal) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 MaxCode/1.0',
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 OpenSol/1.0',
     },
     body: new URLSearchParams({ q: query }).toString(),
     signal,
@@ -815,7 +873,7 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
       redirect: 'manual',
       headers: {
         Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5',
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 MaxCode/1.0',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 OpenSol/1.0',
       },
       signal,
     })
@@ -833,7 +891,7 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
   }
   const type = response.headers.get('content-type') ?? ''
   if (!/text\/|json|xml|javascript/i.test(type)) {
-    throw new HttpError(415, `MaxCode cannot read ${type || 'that content type'}.`, 'unsupported_type')
+    throw new HttpError(415, `OpenSol cannot read ${type || 'that content type'}.`, 'unsupported_type')
   }
   const raw = (await response.text()).slice(0, maxBytes)
   const text = /html/i.test(type) ? stripHtml(raw) : raw
@@ -848,7 +906,7 @@ export async function readUrl(rawUrl, { maxBytes = 400_000 } = {}) {
   }
 }
 
-const INSTRUCTION_FILES = ['MAXCODE.md', 'AGENTS.md', 'CLAUDE.md', '.maxcode/instructions.md']
+const INSTRUCTION_FILES = ['OPENSOL.md', 'MAXCODE.md', 'AGENTS.md', 'CLAUDE.md', '.opensol/instructions.md', '.maxcode/instructions.md']
 const MAX_INSTRUCTIONS = 20_000
 
 /** The first project instruction file found in the open workspace, if any. */

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AgentMode, ChatSession, Message, ProviderId } from '../types'
 import { csrfToken, saveChats } from '../lib/daemon'
+import { useWorkspace } from './workspace'
 
 function createId(prefix: string) {
   const raw =
@@ -46,6 +47,11 @@ function normalizeSession(session: ChatSession): ChatSession {
     createdAt: typeof session.createdAt === 'number' ? session.createdAt : Date.now(),
     updatedAt: typeof session.updatedAt === 'number' ? session.updatedAt : Date.now(),
     mode: session.mode === 'plan' ? 'plan' : session.mode === 'build' ? 'build' : undefined,
+    workspace: typeof session.workspace === 'string' ? session.workspace : undefined,
+    titleSource:
+      session.titleSource === 'ai' || session.titleSource === 'user' || session.titleSource === 'auto'
+        ? session.titleSource
+        : undefined,
   }
 }
 
@@ -110,6 +116,8 @@ export const useChats = create<ChatsState>()((set, get) => ({
       provider,
       model,
       mode,
+      workspace: useWorkspace.getState().info.root || undefined,
+      titleSource: 'auto',
     }
     set((state) => ({ sessions: [session, ...state.sessions], activeId: id }))
     return id
@@ -155,7 +163,7 @@ export const useChats = create<ChatsState>()((set, get) => ({
   renameSession: (sessionId, title) => {
     const clean = title.trim()
     if (!clean) return
-    get().updateSession(sessionId, { title: clean })
+    get().updateSession(sessionId, { title: clean, titleSource: 'user' })
   },
   deleteSession: (sessionId) => {
     set((state) => {
@@ -250,7 +258,7 @@ if (typeof window !== 'undefined') {
 export function exportChats() {
   const data = useChats.getState().sessions
   const blob = new Blob(
-    [JSON.stringify({ app: 'MaxCode', exportedAt: new Date().toISOString(), sessions: data }, null, 2)],
+    [JSON.stringify({ app: 'OpenSol', exportedAt: new Date().toISOString(), sessions: data }, null, 2)],
     { type: 'application/json' },
   )
   const url = URL.createObjectURL(blob)
@@ -264,7 +272,7 @@ export function exportChats() {
 export function importChats(file: File): Promise<number> {
   return file.text().then((text) => {
     const parsed = JSON.parse(text) as { sessions?: unknown[] }
-    if (!Array.isArray(parsed.sessions)) throw new Error('This file does not contain a MaxCode history.')
+    if (!Array.isArray(parsed.sessions)) throw new Error('This file does not contain a OpenSol history.')
     const sessions = parsed.sessions.filter(isSession).map(normalizeSession)
     if (sessions.length === 0) throw new Error('No valid conversations were found in this file.')
     const existing = new Set(useChats.getState().sessions.map((session) => session.id))

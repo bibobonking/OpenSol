@@ -3,9 +3,21 @@ import { create } from 'zustand'
 interface RuntimeState {
   streaming: Record<string, boolean>
   setStreaming: (sessionId: string, active: boolean) => void
+  /** Sessions whose title the AI is writing right now. */
+  titling: Record<string, boolean>
+  setTitling: (sessionId: string, active: boolean) => void
 }
 
 export const useRuntime = create<RuntimeState>()((set) => ({
+  titling: {},
+  setTitling: (sessionId, active) =>
+    set((state) => {
+      if (Boolean(state.titling[sessionId]) === active) return state
+      const titling = { ...state.titling }
+      if (active) titling[sessionId] = true
+      else delete titling[sessionId]
+      return { titling }
+    }),
   streaming: {},
   setStreaming: (sessionId, active) =>
     set((state) => {
@@ -51,6 +63,7 @@ interface UiState {
     | 'search'
     | 'skills'
     | 'plugins'
+    | 'mcp'
     | 'deploy'
     | 'appearance'
     | 'about'

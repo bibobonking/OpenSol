@@ -1,5 +1,6 @@
 import { Service, type Context } from 'cordis'
 import type { AgentMode, AppSettings, ToolName } from '../../types'
+import { mcpDefinition, mcpDefinitions, resolveToolSetting } from '../mcp-tools'
 import type {
   ToolDefinition,
   ToolExecutionContext,
@@ -39,11 +40,11 @@ export class ToolService extends Service {
   }
 
   get(name: ToolName): ToolDefinition | undefined {
-    return this.definitions.get(name)
+    return this.definitions.get(name) ?? mcpDefinition(name)
   }
 
   list(): ToolDefinition[] {
-    return [...this.definitions.values()]
+    return [...this.definitions.values(), ...mcpDefinitions()]
   }
 
   schemas(
@@ -52,9 +53,11 @@ export class ToolService extends Service {
     { subagent = false }: { subagent?: boolean } = {},
   ): ToolSchema[] {
     const list: ToolSchema[] = []
-    for (const def of this.definitions.values()) {
+    // Subagents stay on the built-in read-only tools; MCP tools are not offered to them.
+    const all = subagent ? [...this.definitions.values()] : this.list()
+    for (const def of all) {
       if (def.name === 'subagent' && subagent) continue
-      if (!settings.tools[def.name]?.enabled) continue
+      if (!resolveToolSetting(settings, def.name)?.enabled) continue
       const allowed = def.allowedInMode ? def.allowedInMode(mode) : toolAllowedInMode(def.name, mode)
       if (!allowed) continue
       if ((def.name === 'web_search' || def.name === 'read_url') && !settings.webSearchEnabled) continue
@@ -83,10 +86,10 @@ export class ToolService extends Service {
       'tools/pre-execute',
       exec,
       async () => {
-        if (!settings.tools[name]?.enabled) {
-          return { decision: 'deny', reason: 'This tool is disabled in Settings → Tools.' }
+        if (!resolveToolSetting(settings, name)?.enabled) {
+          return { decision: 'deny', reason: 'This tool is disabled or its MCP server is not connected (Settings → Tools / MCP).' }
         }
-        const def = this.definitions.get(name)
+        const def = this.get(name)
         const allowed = def?.allowedInMode ? def.allowedInMode(mode) : toolAllowedInMode(name, mode)
         if (!allowed) {
           return {
@@ -113,7 +116,7 @@ export class ToolService extends Service {
 
     // 2. tools/execute waterfall
     const result: ToolResult = await this.ctx.events.waterfall('tools/execute', exec, async () => {
-      const def = this.definitions.get(name)
+      const def = this.get(name)
       if (!def) {
         return { output: `Tool "${name}" is not registered.`, isError: true }
       }

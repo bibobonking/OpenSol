@@ -425,7 +425,7 @@ async function authHeaders(providerId, { settings, key } = {}) {
       )
     }
     headers['HTTP-Referer'] = 'http://127.0.0.1'
-    headers['X-Title'] = 'MaxCode'
+    headers['X-Title'] = 'OpenSol'
   }
   return headers
 }

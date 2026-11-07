@@ -9,6 +9,7 @@ import { CompactionService } from './services/compaction'
 import { SubagentService } from './services/subagents'
 import { UiService } from './services/ui'
 import { AgentLoopService } from './services/agent-loop'
+import { TitleService } from './services/titles'
 
 import * as toolFs from './plugins/tools/fs'
 import * as toolShell from './plugins/tools/shell'
@@ -30,6 +31,7 @@ export function createAppKernel(): Context {
   ctx.plugin(SubagentService)
   ctx.plugin(UiService)
   ctx.plugin(AgentLoopService)
+  ctx.plugin(TitleService)
 
   // 2. Mount First-Party Tool Plugins
   ctx.plugin(toolFs)

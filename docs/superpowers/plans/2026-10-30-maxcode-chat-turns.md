@@ -1,4 +1,4 @@
-# MaxCode Chat Turns Implementation Plan
+# OpenSol Chat Turns Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,7 +17,7 @@
 - “Keep the raw assistant/tool message sequence and round IDs needed by model adapters.”
 - “Process queued user turns sequentially, with each agent run limited to its own submitted turn so it cannot consume a later queued prompt early.”
 - Preserve streaming, approvals, stop/cancel, errors, retry, and tool result ordering.
-- Remove only the MaxCode assistant avatar; do not remove unrelated identities/icons.
+- Remove only the OpenSol assistant avatar; do not remove unrelated identities/icons.
 
 ## Review Focus
 
@@ -47,7 +47,7 @@
 - [ ] **Step 2: Run `npm test -- --run src/lib/conversation.test.ts`** and confirm the grouping tests fail because the view model does not exist.
 - [ ] **Step 3: Implement `groupConversationTurns`** preserving chronological assistant/tool segments and excluding orphan tool results from invented assistant content.
 - [ ] **Step 4: Render one response container per turn** in ChatView, placing each `UsedGroup` between the assistant segments that preceded/followed it. Keep tool approval/error/active state in each group.
-- [ ] **Step 5: Remove the MaxCode `LogoMark` from assistant message rendering only.** Preserve any non-MaxCode icon paths.
+- [ ] **Step 5: Remove the OpenSol `LogoMark` from assistant message rendering only.** Preserve any non-OpenSol icon paths.
 - [ ] **Step 6: Run `npm test -- --run src/lib/conversation.test.ts`** and confirm all grouping tests pass.
 
 ### Task 2: Queueing submissions and bounding agent history by turn

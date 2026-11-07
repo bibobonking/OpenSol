@@ -1,11 +1,20 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-export const DATA_DIR = process.env.MAXCODE_DATA
-  ? path.resolve(process.env.MAXCODE_DATA)
-  : path.join(os.homedir(), '.maxcode')
+// OpenSol keeps its data in ~/.opensol. An existing ~/.maxcode (from before the
+// rename) keeps being used so saved keys, chats and plugins are not orphaned.
+function resolveDataDir() {
+  const override = process.env.OPENSOL_DATA || process.env.MAXCODE_DATA
+  if (override) return path.resolve(override)
+  const next = path.join(os.homedir(), '.opensol')
+  const legacy = path.join(os.homedir(), '.maxcode')
+  return !existsSync(next) && existsSync(legacy) ? legacy : next
+}
+
+export const DATA_DIR = resolveDataDir()
 
 const STATE_FILE = path.join(DATA_DIR, 'state.json')
 const SECRETS_FILE = path.join(DATA_DIR, 'secrets.enc')
@@ -22,6 +31,7 @@ const DEFAULT_STATE = () => ({
   chats: { sessions: [], activeId: null },
   workspaces: [],
   activeWorkspace: null,
+  mcpServers: [],
   legacyMigratedAt: null,
 })
 
@@ -69,7 +79,7 @@ async function readJson(file, fallback) {
     if (error instanceof SyntaxError) {
       const backup = `${file}.broken-${Date.now()}`
       await rename(file, backup).catch(() => undefined)
-      throw new Error(`MaxCode data is damaged. The file was moved to ${backup}.`)
+      throw new Error(`OpenSol data is damaged. The file was moved to ${backup}.`)
     }
     throw error
   }
@@ -121,6 +131,7 @@ export async function loadState() {
           .slice(0, 20)
       : [],
     activeWorkspace: typeof parsed.activeWorkspace === 'string' ? parsed.activeWorkspace : null,
+    mcpServers: Array.isArray(parsed.mcpServers) ? parsed.mcpServers.filter((item) => item && typeof item.id === 'string') : [],
   }
   return stateCache
 }
@@ -193,7 +204,7 @@ export async function loadSecrets() {
     return secretsCache
   } catch (error) {
     throw new Error(
-      `MaxCode could not decrypt its saved keys. Restore ${MASTER_FILE} or reset secrets from Settings → About. (${error instanceof Error ? error.message : 'unknown error'})`,
+      `OpenSol could not decrypt its saved keys. Restore ${MASTER_FILE} or reset secrets from Settings → About. (${error instanceof Error ? error.message : 'unknown error'})`,
     )
   }
 }
@@ -337,6 +348,26 @@ export async function addWorkspace(rawPath) {
   const workspaces = [entry, ...state.workspaces.filter((item) => item.path !== resolved)].slice(0, 12)
   await saveState({ ...state, workspaces, activeWorkspace: resolved })
   return entry
+}
+
+/** Drop one folder from the saved list. The folder itself is never touched on disk. */
+export async function removeWorkspace(rawPath) {
+  const state = await loadState()
+  const resolved = path.resolve(rawPath)
+  const workspaces = state.workspaces.filter((item) => item.path !== resolved)
+  const activeWorkspace = state.activeWorkspace === resolved ? null : state.activeWorkspace
+  await saveState({ ...state, workspaces, activeWorkspace })
+  return workspaces.length !== state.workspaces.length
+}
+
+export async function getMcpServers() {
+  const state = await loadState()
+  return state.mcpServers ?? []
+}
+
+export async function saveMcpServers(mcpServers) {
+  const state = await loadState()
+  await saveState({ ...state, mcpServers })
 }
 
 export async function forgetWorkspace() {

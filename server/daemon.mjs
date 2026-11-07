@@ -22,12 +22,15 @@ import {
   DATA_DIR,
   dataPaths,
   forgetWorkspace,
+  getMcpServers,
   loadSecretsSafe,
   loadState,
   migrateLegacy,
   resetAll,
+  removeWorkspace,
   resetSecrets,
   saveChats,
+  saveMcpServers,
   saveSettings,
   saveState,
   secretSummary,
@@ -75,10 +78,11 @@ import {
   setPluginSafe,
   uninstallPlugin,
 } from './lib/plugins.mjs'
+import { mcp, sanitizeServerConfig } from './lib/mcp.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const DIST = path.resolve(HERE, '..', 'dist')
-const VERSION = '1.0.0'
+const VERSION = '3.1.0'
 const SESSION_COOKIE = 'maxcode_session'
 const CSRF_HEADER = 'x-maxcode-csrf'
 const SESSION_TTL = 14 * 24 * 60 * 60 * 1000
@@ -119,7 +123,7 @@ function allowedOrigins() {
 function guardRequest(req) {
   const hostHeader = String(req.headers.host ?? '').toLowerCase()
   if (!hostHeader || !allowedHosts().has(hostHeader)) {
-    throw new HttpError(403, 'MaxCode only answers requests addressed to localhost.', 'bad_host')
+    throw new HttpError(403, 'OpenSol only answers requests addressed to localhost.', 'bad_host')
   }
   const origin = String(req.headers.origin ?? '')
   if (origin && !allowedOrigins().has(origin.toLowerCase())) {
@@ -156,7 +160,7 @@ function sessionFrom(req) {
 
 function requireSession(req) {
   const session = sessionFrom(req)
-  if (!session) throw new HttpError(401, 'Open MaxCode from its local address to start a session.', 'no_session')
+  if (!session) throw new HttpError(401, 'Open OpenSol from its local address to start a session.', 'no_session')
   return session
 }
 
@@ -220,6 +224,12 @@ function sanitizeSettings(patch, current = {}) {
   // Plugin themes are named by their plugin, so accept any bounded theme slug.
   if (typeof source.theme === 'string' && /^[a-z0-9-]{1,64}$/.test(source.theme)) next.theme = source.theme
   if (source.mode === 'build' || source.mode === 'plan') next.mode = source.mode
+  if (typeof source.aiSessionTitles === 'boolean') next.aiSessionTitles = source.aiSessionTitles
+  if (typeof source.autoCollapseWork === 'boolean') next.autoCollapseWork = source.autoCollapseWork
+  if (source.workDetail === 'concise' || source.workDetail === 'detailed') next.workDetail = source.workDetail
+  if (typeof source.chatFontSize === 'number' && Number.isFinite(source.chatFontSize)) {
+    next.chatFontSize = Math.max(12, Math.min(20, Math.round(source.chatFontSize)))
+  }
 
   if (source.providers && typeof source.providers === 'object') {
     const providers = { ...(current.providers ?? {}) }
@@ -491,7 +501,7 @@ const PREVIEW_CSP = [
 
 function previewTokenFor(sessionToken) {
   const record = sessions.get(sessionToken)
-  if (!record) throw new HttpError(401, 'Open MaxCode from its local address to start a session.', 'no_session')
+  if (!record) throw new HttpError(401, 'Open OpenSol from its local address to start a session.', 'no_session')
   if (!record.previewToken) {
     record.previewToken = randomBytes(24).toString('base64url')
     previewTokens.set(record.previewToken, sessionToken)
@@ -503,7 +513,7 @@ function previewTokenFor(sessionToken) {
 async function handlePreview(req, res, rawPath) {
   const hostHeader = String(req.headers.host ?? '').toLowerCase()
   if (!hostHeader || !allowedHosts().has(hostHeader)) {
-    throw new HttpError(403, 'MaxCode only answers requests addressed to localhost.', 'bad_host')
+    throw new HttpError(403, 'OpenSol only answers requests addressed to localhost.', 'bad_host')
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     throw new HttpError(405, 'Method not allowed.', 'method_not_allowed')
@@ -514,7 +524,7 @@ async function handlePreview(req, res, rawPath) {
   const record = sessionToken ? sessions.get(sessionToken) : null
   if (!record || Date.now() - record.created > SESSION_TTL) {
     previewTokens.delete(match[1])
-    throw new HttpError(401, 'This preview link expired. Reopen the preview from MaxCode.', 'preview_expired')
+    throw new HttpError(401, 'This preview link expired. Reopen the preview from OpenSol.', 'preview_expired')
   }
   let relative
   try {
@@ -747,11 +757,59 @@ async function route(req, res) {
         return
       }
       if (method === 'DELETE') {
-        await forgetWorkspace()
+        const target = url.searchParams.get('path')
+        if (target) await removeWorkspace(target)
+        else await forgetWorkspace()
         json(res, 200, await workspacePayload())
         return
       }
       throw new HttpError(405, 'Method not allowed.', 'method_not_allowed')
+    }
+
+    if (pathname === '/api/mcp' && method === 'GET') {
+      json(res, 200, { servers: mcp.list() })
+      return
+    }
+
+    if (pathname === '/api/mcp' && method === 'PUT') {
+      const body = await readJson(req, 512 * 1024)
+      const incoming = Array.isArray(body.servers) ? body.servers.slice(0, 30) : []
+      const previous = new Map((await getMcpServers()).map((item) => [item.id, item]))
+      const seen = new Set()
+      const configs = incoming.map((item) => {
+        let config = sanitizeServerConfig(item, previous.get(item?.id))
+        let suffix = 2
+        const base = config.id
+        while (seen.has(config.id)) config = { ...config, id: `${base}-${suffix++}` }
+        seen.add(config.id)
+        return config
+      })
+      await saveMcpServers(configs)
+      await mcp.setConfigs(configs)
+      for (const config of configs) {
+        const runtime = mcp.runtime.get(config.id)
+        if (config.enabled && (!runtime || runtime.status === 'disconnected')) void mcp.connect(config.id)
+        if (!config.enabled && runtime?.status === 'connected') await mcp.disconnect(config.id)
+      }
+      json(res, 200, { servers: mcp.list() })
+      return
+    }
+
+    const mcpRoute = /^\/api\/mcp\/([a-z0-9][a-z0-9-]{0,39})\/(connect|disconnect|refresh)$/.exec(pathname)
+    if (mcpRoute && method === 'POST') {
+      const [, id, action] = mcpRoute
+      if (action === 'connect') await mcp.connect(id)
+      else if (action === 'disconnect') await mcp.disconnect(id)
+      else await mcp.refresh(id)
+      json(res, 200, { servers: mcp.list() })
+      return
+    }
+
+    if (pathname === '/api/mcp/call' && method === 'POST') {
+      const body = await readJson(req, 4 * 1024 * 1024)
+      const result = await mcp.callTool(String(body.server ?? ''), String(body.tool ?? ''), body.args ?? {})
+      json(res, 200, { result })
+      return
     }
 
     if (pathname === '/api/workspaces/browse') {
@@ -935,7 +993,7 @@ async function route(req, res) {
   }
   if (pathname === '/preview-host.html') {
     // Hosts model-written pages inside a sandboxed iframe (opaque origin: no cookies, no
-    // access to MaxCode). It needs CDN scripts and inline code, so it gets its own CSP.
+    // access to OpenSol). It needs CDN scripts and inline code, so it gets its own CSP.
     res.removeHeader('X-Frame-Options')
     res.setHeader(
       'Content-Security-Policy',
@@ -966,7 +1024,7 @@ async function handler(req, res) {
       return
     }
     if (!(error instanceof HttpError)) {
-      console.error(`[maxcode] ${clientIp(req)} ${req.method} ${req.url}`)
+      console.error(`[opensol] ${clientIp(req)} ${req.method} ${req.url}`)
       console.error(error)
     }
     sendError(res, error)
@@ -988,6 +1046,9 @@ async function findPort(start) {
 
 export async function startServer({ port: requested = 4174, open = false } = {}) {
   await mkdir(DATA_DIR, { recursive: true, mode: 0o700 })
+  mcp.getCwd = async () => (await workspaceRoot().catch(() => '')) || os.homedir()
+  await mcp.setConfigs(await getMcpServers())
+  void mcp.connectAll().catch(() => undefined)
   port = requested === 0 ? await findPort(4174) : requested
   const server = http.createServer((req, res) => {
     handler(req, res)
@@ -1006,26 +1067,27 @@ export async function startServer({ port: requested = 4174, open = false } = {})
   )
 
   const shutdown = async (signal) => {
-    console.log(`[maxcode] ${signal} received, shutting down.`)
+    console.log(`[opensol] ${signal} received, shutting down.`)
     server.close()
+    await mcp.shutdown().catch(() => undefined)
     await rm(pidFile, { force: true }).catch(() => undefined)
     process.exit(0)
   }
   process.on('SIGTERM', () => void shutdown('SIGTERM'))
   process.on('SIGINT', () => void shutdown('SIGINT'))
-  process.on('uncaughtException', (error) => console.error('[maxcode] uncaught exception', error))
-  process.on('unhandledRejection', (error) => console.error('[maxcode] unhandled rejection', error))
+  process.on('uncaughtException', (error) => console.error('[opensol] uncaught exception', error))
+  process.on('unhandledRejection', (error) => console.error('[opensol] unhandled rejection', error))
 
   const url = `http://${host}:${port}`
-  console.log(`[maxcode] daemon listening on ${url}`)
-  console.log(`[maxcode] data: ${DATA_DIR}`)
-  console.log(`[maxcode] dist: ${DIST}`)
+  console.log(`[opensol] daemon listening on ${url}`)
+  console.log(`[opensol] data: ${DATA_DIR}`)
+  console.log(`[opensol] dist: ${DIST}`)
   if (open) {
     const { spawn } = await import('node:child_process')
     const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open'
     const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url]
     const child = spawn(opener, args, { detached: true, stdio: 'ignore' })
-    child.on('error', () => console.log(`[maxcode] open ${url} in your browser.`))
+    child.on('error', () => console.log(`[opensol] open ${url} in your browser.`))
     child.unref()
   }
   return { server, url, port }
@@ -1051,7 +1113,7 @@ export async function stopDaemon() {
   const status = await daemonStatus()
   if (!status.running) {
     await rm(path.join(DATA_DIR, 'daemon.json'), { force: true })
-    return { stopped: false, reason: 'MaxCode is not running.' }
+    return { stopped: false, reason: 'OpenSol is not running.' }
   }
   try {
     process.kill(status.info.pid, 'SIGTERM')

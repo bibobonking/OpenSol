@@ -64,7 +64,7 @@ export function PreviewPane() {
         </span>
         <p className="text-[13px] font-medium text-ink">Nothing to preview yet</p>
         <p className="max-w-[260px] text-[11.5px] leading-relaxed text-muted">
-          Ask MaxCode to build a page or a game. The first HTML file it writes shows up here and reloads as it changes.
+          Ask OpenSol to build a page or a game. The first HTML file it writes shows up here and reloads as it changes.
         </p>
       </div>
     )
@@ -159,7 +159,7 @@ export function PreviewPane() {
       </div>
 
       <p className="shrink-0 border-t border-line px-3 py-1.5 text-[11px] text-faint">
-        Runs in a sandbox: it can load your files and public CDNs, but cannot reach MaxCode or your keys.
+        Runs in a sandbox: it can load your files and public CDNs, but cannot reach OpenSol or your keys.
       </p>
     </div>
   )

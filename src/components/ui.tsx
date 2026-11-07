@@ -88,7 +88,7 @@ export function Modal({
         aria-label="Close dialog"
         tabIndex={-1}
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-ink/25 backdrop-blur-[2px] dark:bg-black/50"
+        className="modal-scrim absolute inset-0 cursor-default bg-black/35 backdrop-blur-[3px] dark:bg-black/60"
       />
       <div
         ref={panelRef}
@@ -97,7 +97,7 @@ export function Modal({
         aria-labelledby={labelledBy}
         tabIndex={-1}
         className={cn(
-          'modal-panel relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line surface-lift shadow-float sm:max-h-[86dvh] sm:rounded-2xl',
+          'modal-panel relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line surface-lift shadow-float sm:max-h-[86dvh] sm:rounded-xl',
           wide ? 'sm:w-[min(920px,94vw)]' : 'sm:w-[min(760px,94vw)]',
           className,
         )}
@@ -125,7 +125,7 @@ export function ModalHeader({
   return (
     <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
       <div className="min-w-0">
-        <h2 id={id} className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
+        <h2 id={id} className="text-[15px] font-semibold tracking-[-0.02em] text-ink">
           {title}
         </h2>
         {description && <p className="mt-1 text-[12.5px] leading-relaxed text-muted">{description}</p>}
@@ -170,7 +170,7 @@ export function Switch({
     >
       <span
         className={cn(
-          'pointer-events-none block h-[16px] w-[16px] rounded-full bg-white shadow-sm transition-transform duration-200',
+          'pointer-events-none block h-[16px] w-[16px] rounded-full bg-white shadow-sm transition-transform duration-300 ease-spring',
           checked ? 'translate-x-[19px]' : 'translate-x-[3px]',
         )}
       />
@@ -196,7 +196,7 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cn(
-        'inline-flex items-center rounded-lg border border-line bg-raised/70 p-0.5',
+        'inline-flex items-center rounded-lg bg-raised p-0.5',
         size === 'md' ? 'text-[12.5px]' : 'text-[11.5px]',
         disabled && 'opacity-50',
         className,
@@ -210,7 +210,7 @@ export function Segmented<T extends string>({
           disabled={disabled}
           onClick={() => onChange(option.value)}
           className={cn(
-            'rounded-[6px] font-medium transition-all duration-150 disabled:cursor-not-allowed',
+            'rounded-md font-medium transition-all duration-200 disabled:cursor-not-allowed',
             size === 'md' ? 'px-3 py-1.5' : 'px-2.5 py-1',
             value === option.value
               ? 'bg-panel text-ink shadow-[0_1px_2px_rgba(20,22,30,0.08)]'
@@ -253,7 +253,7 @@ export function ToastHost() {
   const Icon = tone.icon
   return createPortal(
     <div
-      className="pointer-events-none fixed bottom-56 left-1/2 z-[100] flex w-[min(92vw,440px)] -translate-x-1/2 animate-rise items-start gap-2.5 rounded-xl border border-line surface-lift px-3.5 py-3 text-[12.5px] text-ink shadow-float sm:bottom-48"
+      className="pointer-events-none fixed bottom-56 left-1/2 z-[100] flex w-[min(92vw,440px)] -translate-x-1/2 animate-scalein items-start gap-2.5 rounded-xl border border-line surface-lift px-3.5 py-3 text-[12.5px] text-ink shadow-float sm:bottom-48"
       role="status"
     >
       <Icon size={16} className={cn('mt-0.5 shrink-0', tone.className)} />
@@ -297,7 +297,7 @@ export function ConfirmDialog() {
             data-autofocus
             onClick={() => resolve(true)}
             className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-on-accent transition-colors',
+              'inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-on-accent transition-all active:scale-95',
               danger ? 'bg-danger hover:bg-danger/90' : 'bg-accent hover:bg-accent/90',
             )}
           >

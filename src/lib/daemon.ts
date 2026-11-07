@@ -7,6 +7,7 @@ import type {
   DeployProviderId,
   DeployRequest,
   DeployResult,
+  McpServer,
   ModelInfo,
   ProviderId,
   ProviderStatus,
@@ -80,7 +81,7 @@ export async function ensureSession(force = false): Promise<void> {
       })
     } catch {
       throw new DaemonError(
-        'MaxCode’s local daemon is not reachable. Start it with “npm start” in the MaxCode folder, then reload this page.',
+        'OpenSol’s local daemon is not reachable. Start it with “npm start” in the OpenSol folder, then reload this page.',
         0,
         'daemon_unreachable',
       )
@@ -272,6 +273,34 @@ export function addWorkspace(path: string): Promise<{ workspace: WorkspaceInfo; 
 
 export function forgetWorkspace(): Promise<WorkspaceInfo> {
   return api('/api/workspaces', { method: 'DELETE' })
+}
+
+/** Remove one folder from the saved list. The folder stays on disk. */
+export function removeWorkspaceFromList(path: string): Promise<WorkspaceInfo> {
+  return api(`/api/workspaces?path=${encodeURIComponent(path)}`, { method: 'DELETE' })
+}
+
+export type McpServerInput = Partial<McpServer> & { name: string }
+
+export function mcpList(): Promise<{ servers: McpServer[] }> {
+  return api('/api/mcp')
+}
+
+export function mcpSave(servers: McpServerInput[]): Promise<{ servers: McpServer[] }> {
+  return api('/api/mcp', { method: 'PUT', body: JSON.stringify({ servers }) })
+}
+
+export function mcpAction(id: string, action: 'connect' | 'disconnect' | 'refresh'): Promise<{ servers: McpServer[] }> {
+  return api(`/api/mcp/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: '{}' })
+}
+
+export function mcpCall(
+  server: string,
+  tool: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<{ result: { text: string; isError: boolean } }> {
+  return api('/api/mcp/call', { method: 'POST', body: JSON.stringify({ server, tool, args }), signal })
 }
 
 export function browseFolders(path: string) {

@@ -39,7 +39,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import type { DeployProviderId, Effort, ModelInfo, ProviderId, SearchProvider, Skill, ToolName } from '../types'
+import type { DeployProviderId, Effort, ModelInfo, ProviderId, SearchProvider, Skill, BuiltinToolName } from '../types'
 import type { LucideIcon } from 'lucide-react'
 import { EFFORT_LABELS, PROVIDERS, PROVIDER_MAP } from '../data/providers'
 import { STARTER_SKILL } from '../data/skills'
@@ -61,16 +61,18 @@ import { PERMISSION_MODES, permissionMode, permissionTools } from '../lib/permis
 import { cn, formatBytes, readFileAsText } from '../lib/utils'
 import { LogoMark } from './Logo'
 import { PluginManager } from './PluginManager'
+import { McpTab } from './McpTab'
 import { pluginRuntime } from '../plugins'
 import { Modal, Segmented, Spinner, Switch } from './ui'
 
 const TABS = [
   { id: 'general', label: 'General', icon: SlidersHorizontal, description: 'Permissions, appearance and conversation display.' },
   { id: 'models', label: 'Models', icon: Cpu, description: 'Providers, encrypted keys, live models and reasoning defaults.' },
-  { id: 'tools', label: 'Tools', icon: Wrench, description: 'What MaxCode can do on this machine, and when it must ask.' },
+  { id: 'tools', label: 'Tools', icon: Wrench, description: 'What OpenSol can do on this machine, and when it must ask.' },
   { id: 'search', label: 'Search', icon: Globe2, description: 'Give the agent current web results with your own key.' },
   { id: 'skills', label: 'Skills', icon: Sparkles, description: 'Instructions added to every request when enabled.' },
   { id: 'plugins', label: 'Plugins', icon: Package, description: 'Install local plugin packages, review what they ask for, and run them once you trust the code.' },
+  { id: 'mcp', label: 'MCP', icon: Link2, description: 'Connect Model Context Protocol servers and choose which of their tools the agent may call.' },
   { id: 'deploy', label: 'Deploy', icon: Rocket, description: 'Hosting credentials and command-line tools.' },
   { id: 'appearance', label: 'Appearance', icon: Palette, description: 'Theme and interface preferences.' },
   { id: 'about', label: 'About', icon: Info, description: 'Local storage, history and reset controls.' },
@@ -100,15 +102,18 @@ function SettingsSection({
   action?: ReactNode
 }) {
   return (
-    <section className="border-b border-line px-5 py-5 last:border-b-0 sm:px-7">
+    <section className="settings-card mx-5 my-4 sm:mx-8">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-display text-[14px] font-semibold tracking-[-0.01em] text-ink">{title}</h3>
-          {description && <p className="mt-1 max-w-[620px] text-[11px] leading-relaxed text-muted">{description}</p>}
+          <h3 className="flex items-center gap-2 font-display text-[14px] font-semibold tracking-[-0.01em] text-ink">
+            <span className="h-3.5 w-[3px] rounded-full bg-accent" />
+            {title}
+          </h3>
+          {description && <p className="mt-1.5 max-w-[620px] text-[11.5px] leading-relaxed text-muted">{description}</p>}
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>
-      <div className="mt-3.5">{children}</div>
+      <div className="mt-4">{children}</div>
     </section>
   )
 }
@@ -636,7 +641,7 @@ function ModelsTab() {
   )
 }
 
-const TOOL_ORDER: Array<{ title: string; tools: ToolName[] }> = [
+const TOOL_ORDER: Array<{ title: string; tools: BuiltinToolName[] }> = [
   {
     title: 'Workspace and shell',
     tools: ['read_file', 'list_files', 'grep', 'write_file', 'edit_file', 'rewrite_file', 'shell', 'git'],
@@ -645,7 +650,7 @@ const TOOL_ORDER: Array<{ title: string; tools: ToolName[] }> = [
   { title: 'Delegation', tools: ['subagent'] },
 ]
 
-const TOOL_ICONS: Record<ToolName, LucideIcon> = {
+const TOOL_ICONS: Record<BuiltinToolName, LucideIcon> = {
   shell: SquareTerminal,
   read_file: FileText,
   list_files: FolderTree,
@@ -659,7 +664,7 @@ const TOOL_ICONS: Record<ToolName, LucideIcon> = {
   subagent: Bot,
 }
 
-const TOOL_COPY: Record<ToolName, { label: string; description: string }> = {
+const TOOL_COPY: Record<BuiltinToolName, { label: string; description: string }> = {
   shell: { label: 'Shell', description: 'Run commands in the workspace root. Plan mode allows read-only commands only.' },
   read_file: { label: 'Read file', description: 'Inspect a file on disk before changing it.' },
   list_files: { label: 'List files', description: 'Explore the real workspace tree.' },
@@ -812,7 +817,7 @@ function SearchTab() {
     try {
       const response = await executeDaemonTool(
         'web_search',
-        { query: 'MaxCode local coding agent', provider: settings.searchProvider },
+        { query: 'OpenSol local coding agent', provider: settings.searchProvider },
         'build',
       )
       const result = response.result && typeof response.result === 'object' ? (response.result as Record<string, unknown>) : {}
@@ -1413,7 +1418,7 @@ function DeployTab() {
 
       <SettingsSection
         title="Command-line tools"
-        description="MaxCode uses an installed CLI when available and falls back to npx. Node.js must be on PATH."
+        description="OpenSol uses an installed CLI when available and falls back to npx. Node.js must be on PATH."
       >
         <div className="overflow-hidden rounded-xl border border-line">
           {(Object.keys(DEPLOY_META) as DeployProviderId[]).map((provider, index) => {
@@ -1459,7 +1464,7 @@ function PluginsTab() {
   return (
     <SettingsSection
       title="Local plugins"
-      description="MaxCode only installs plugin packages you choose from this machine. A plugin stays sandboxed and disabled until you review its permissions and mark it Safe."
+      description="OpenSol only installs plugin packages you choose from this machine. A plugin stays sandboxed and disabled until you review its permissions and mark it Safe."
     >
       <PluginManager />
     </SettingsSection>
@@ -1602,6 +1607,18 @@ function GeneralTab() {
           <option value="completion">On completion</option>
           <option value="never">Never</option>
         </select>
+      </div>
+
+      <div className="settings-row">
+        <div className="min-w-0">
+          <p className="settings-label">Let AI name sessions</p>
+          <p className="settings-hint">After the first answer, the model writes a short title for the session. Names you type yourself are never replaced.</p>
+        </div>
+        <Switch
+          checked={settings.aiSessionTitles}
+          onChange={(aiSessionTitles) => update({ aiSessionTitles })}
+          label="Let AI name sessions"
+        />
       </div>
 
       <div className="settings-row">
@@ -1755,7 +1772,7 @@ function AboutTab() {
           ? 'Conversation history cleared.'
           : scope === 'settings'
             ? 'Settings restored to defaults.'
-            : 'MaxCode was reset.',
+            : 'OpenSol was reset.',
         'success',
       )
     } catch (cause) {
@@ -1772,13 +1789,13 @@ function AboutTab() {
           <LogoMark size={46} />
           <div>
             <div className="flex flex-wrap items-baseline gap-2">
-              <h3 className="font-display text-[20px] font-semibold tracking-[-0.03em] text-ink">MaxCode</h3>
+              <h3 className="font-display text-[20px] font-semibold tracking-[-0.03em] text-ink">OpenSol</h3>
               <span className="text-[10px] text-faint">v{daemon?.version ?? '1.0.0'}</span>
             </div>
-            <p className="mt-0.5 text-[10.5px] font-medium text-muted">A DevSoft product</p>
+            <p className="mt-0.5 text-[10.5px] font-medium text-muted">A OpenSoft product</p>
             <p className="mt-2 max-w-[520px] text-[10.5px] leading-relaxed text-muted">
               A local-first coding agent with a real workspace, shell, git, web research, subagents and deploy flows.
-              No MaxCode account and no DevSoft server. Your keys never leave this machine.
+              No OpenSol account and no OpenSoft server. Your keys never leave this machine.
             </p>
           </div>
         </div>
@@ -1796,7 +1813,7 @@ function AboutTab() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Local data" description="Everything is stored under ~/.maxcode. Clearing that folder removes MaxCode’s local state.">
+      <SettingsSection title="Local data" description="Everything is stored under ~/.maxcode. Clearing that folder removes OpenSol’s local state.">
         <div className="space-y-1.5 rounded-lg border border-line bg-raised/30 px-3 py-2.5 text-[10px]">
           <p className="flex items-center justify-between gap-3">
             <span className="text-faint">Data folder</span>
@@ -1907,7 +1924,7 @@ function AboutTab() {
           </div>
           <div className="flex flex-col gap-2 rounded-lg border border-danger/20 bg-danger/[0.02] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[11px] font-medium text-ink">Reset MaxCode</p>
+              <p className="text-[11px] font-medium text-ink">Reset OpenSol</p>
               <p className="mt-0.5 text-[9.5px] text-muted">
                 Delete conversations, encrypted keys, skills, settings and the remembered workspace.
               </p>
@@ -1941,13 +1958,15 @@ export function SettingsModal() {
   const notify = useUi((state) => state.notify)
   const daemon = useSettings((state) => state.daemon)
   const contentRef = useRef<HTMLDivElement>(null)
+  const activeIndex = Math.max(0, TABS.findIndex((item) => item.id === tab))
+  const current = TABS[activeIndex]
 
   useEffect(() => {
     if (open) contentRef.current?.scrollTo({ top: 0 })
   }, [open, tab])
 
   const copyConfig = async () => {
-    const path = daemon?.dataDir ?? '~/.maxcode'
+    const path = daemon?.dataDir ?? '~/.opensol'
     try {
       await navigator.clipboard.writeText(path)
       notify(`Copied the data folder path: ${path}`, 'success')
@@ -1961,85 +1980,103 @@ export function SettingsModal() {
       open={open}
       onClose={close}
       labelledBy="settings-title"
-      className="h-[92dvh] p-0 sm:h-[min(88dvh,780px)] sm:w-[min(980px,94vw)]"
+      className="settings-shell h-[94dvh] p-0 sm:h-[min(88dvh,780px)] sm:w-[min(1040px,96vw)] sm:!rounded-[28px]"
     >
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-5">
-          <h2 id="settings-title" className="text-[16px] font-semibold tracking-[-0.02em] text-ink">
-            Settings
-          </h2>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => void copyConfig()}
-              className="hidden h-8 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-[11px] font-medium text-ink transition-colors hover:bg-raised sm:inline-flex"
-              title={daemon?.dataDir ?? '~/.maxcode'}
-            >
-              <HardDrive size={12} />
-              Data folder
-            </button>
-            <button type="button" className="icon-button" onClick={close} aria-label="Close settings">
-              <X size={16} />
-            </button>
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <aside className="relative hidden w-[232px] shrink-0 flex-col bg-canvas sm:flex">
+          <div className="settings-glow pointer-events-none absolute inset-x-0 top-0 h-48" />
+          <div className="relative px-6 pb-4 pt-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-faint">OpenSol · v3.1.0</p>
+            <h2 id="settings-title" className="mt-1.5 font-display text-[26px] font-semibold leading-none tracking-[-0.035em] text-ink">
+              Settings
+            </h2>
           </div>
-        </div>
-
-        <div className="flex min-h-0 flex-1">
-          <aside className="hidden w-[200px] shrink-0 flex-col border-r border-line bg-canvas sm:flex">
-            <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-              {TABS.map((item) => {
-                const Icon = item.icon
-                const active = tab === item.id
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => openSettings(item.id)}
-                    title={item.description}
-                    className={cn(
-                      'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[12.5px] transition-colors',
-                      active ? 'bg-raised font-medium text-ink' : 'text-muted hover:bg-raised/60 hover:text-ink',
-                    )}
-                  >
-                    <Icon size={14} className={cn(active ? 'text-ink' : 'text-faint')} />
-                    {item.label}
-                  </button>
-                )
-              })}
-            </nav>
-            <div className="border-t border-line p-3">
-              <p className="flex items-center gap-1.5 text-[9px] text-faint">
-                <LockKeyhole size={10} />
-                Keys encrypted on this machine
-              </p>
-              <p className="mt-1 text-[9px] text-faint">MaxCode 1.0 · DevSoft</p>
-            </div>
-          </aside>
-
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="thin-scroll flex shrink-0 gap-1 overflow-x-auto border-b border-line px-3 py-2 sm:hidden">
-              {TABS.map((item) => (
+          <nav className="relative flex-1 overflow-y-auto px-3 pb-3">
+            <span
+              aria-hidden
+              className="settings-pill absolute left-3 right-3 top-0 h-10 rounded-2xl bg-panel shadow-pill ring-1 ring-line transition-transform duration-500 ease-spring"
+              style={{ transform: `translateY(${activeIndex * 42}px)` }}
+            />
+            {TABS.map((item, index) => {
+              const Icon = item.icon
+              const active = tab === item.id
+              return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => openSettings(item.id)}
+                  title={item.description}
                   className={cn(
-                    'shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-medium transition-colors',
-                    tab === item.id ? 'bg-ink text-panel' : 'text-muted hover:bg-raised',
+                    'group/tab relative mb-[2px] flex h-10 w-full items-center gap-3 rounded-2xl px-3 text-left text-[12.5px] transition-colors duration-200',
+                    active ? 'font-semibold text-ink' : 'text-muted hover:text-ink',
                   )}
                 >
+                  <span className={cn('w-4 font-mono text-[9.5px] tabular-nums transition-colors', active ? 'text-accent' : 'text-faint')}>
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <Icon size={14} className={cn('transition-transform duration-300 group-hover/tab:scale-110', active ? 'text-accent' : 'text-faint')} />
                   {item.label}
                 </button>
-              ))}
-            </div>
+              )
+            })}
+          </nav>
+          <div className="relative px-6 py-4">
+            <p className="flex items-center gap-1.5 text-[10px] text-faint">
+              <LockKeyhole size={10} /> Keys encrypted on this machine
+            </p>
+          </div>
+        </aside>
 
-            <div ref={contentRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-panel sm:border-l sm:border-line">
+          <div className="thin-scroll flex shrink-0 gap-1.5 overflow-x-auto border-b border-line px-3 py-2.5 sm:hidden">
+            {TABS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => openSettings(item.id)}
+                className={cn(
+                  'shrink-0 rounded-full px-3 py-1.5 text-[11px] font-medium transition-all duration-200',
+                  tab === item.id ? 'bg-ink text-panel' : 'bg-raised text-muted',
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <header className="flex shrink-0 items-start justify-between gap-4 px-5 pb-3 pt-5 sm:px-8 sm:pt-7">
+            <div key={tab} className="settings-title-in min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-accent">
+                {String(activeIndex + 1).padStart(2, '0')} / {String(TABS.length).padStart(2, '0')}
+              </p>
+              <h3 className="mt-1 font-display text-[28px] font-semibold leading-none tracking-[-0.035em] text-ink">{current.label}</h3>
+              <p className="mt-2 max-w-[560px] text-[12.5px] leading-relaxed text-muted">{current.description}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => void copyConfig()}
+                className="hidden h-8 items-center gap-1.5 rounded-full border border-line bg-panel px-3 text-[11px] font-medium text-ink transition-all hover:bg-raised active:scale-95 sm:inline-flex"
+                title={daemon?.dataDir ?? '~/.opensol'}
+              >
+                <HardDrive size={12} />
+                Data folder
+              </button>
+              <button type="button" className="icon-button h-8 w-8 rounded-full" onClick={close} aria-label="Close settings">
+                <X size={16} />
+              </button>
+            </div>
+          </header>
+
+          <div ref={contentRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto pb-6">
+            <div key={tab} className="settings-enter">
               {tab === 'general' && <GeneralTab />}
               {tab === 'models' && <ModelsTab />}
               {tab === 'tools' && <ToolsTab />}
               {tab === 'search' && <SearchTab />}
               {tab === 'skills' && <SkillsTab />}
               {tab === 'plugins' && <PluginsTab />}
+              {tab === 'mcp' && <McpTab />}
               {tab === 'deploy' && <DeployTab />}
               {tab === 'appearance' && <AppearanceTab />}
               {tab === 'about' && <AboutTab />}

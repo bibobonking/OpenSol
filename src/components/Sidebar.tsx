@@ -12,6 +12,7 @@ import {
   Plus,
   Rocket,
   Search,
+  Plug,
   Settings,
   Sparkles,
   Trash2,
@@ -22,6 +23,7 @@ import { hasCredentials, useSettings } from '../store/settings'
 import { useRuntime, useUi } from '../store/ui'
 import { useWorkspace } from '../store/workspace'
 import { stopRun } from '../agent'
+import { kernel } from '../core/kernel'
 import { getProviderName } from '../data/providers'
 import { cn, downloadText, formatRelativeTime, groupChatsByDate } from '../lib/utils'
 import { LogoLockup } from './Logo'
@@ -46,6 +48,7 @@ export function Sidebar() {
   const settings = useSettings()
   const workspace = useWorkspace((state) => state.info)
   const addWorkspace = useWorkspace((state) => state.addWorkspace)
+  const removeWorkspace = useWorkspace((state) => state.removeWorkspace)
   const sidebarCollapsed = useUi((state) => state.sidebarCollapsed)
   const toggleSidebar = useUi((state) => state.toggleSidebar)
   const mobileOpen = useUi((state) => state.mobileSidebarOpen)
@@ -57,6 +60,7 @@ export function Sidebar() {
   const notify = useUi((state) => state.notify)
   const focusComposer = useUi((state) => state.focusComposer)
   const streaming = useRuntime((state) => state.streaming)
+  const titling = useRuntime((state) => state.titling)
 
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState<ChatMenu | null>(null)
@@ -108,6 +112,28 @@ export function Sidebar() {
     }
   }
 
+  const deleteWorkspace = async (path: string, name: string) => {
+    const confirmed = await askConfirm({
+      title: 'Remove this workspace?',
+      body: `“${name}” is removed from OpenSol's list. The folder and its files stay on your disk; conversations started there are kept.`,
+      confirmLabel: 'Remove workspace',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    try {
+      await removeWorkspace(path)
+      notify(`Removed ${name} from your workspaces.`, 'success')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Could not remove that workspace.', 'error')
+    }
+  }
+
+  const aiRename = async (id: string) => {
+    setMenu(null)
+    const title = await kernel.titles?.generate(id, { force: true })
+    if (!title) notify('The model could not suggest a title right now.', 'error')
+  }
+
   const beginRename = (id: string, title: string) => {
     setEditingId(id)
     setDraftTitle(title)
@@ -141,12 +167,12 @@ export function Sidebar() {
     const body = session.messages
       .flatMap((message) => {
         if (message.role === 'user') return [`## You\n\n${message.content}`]
-        if (message.role === 'assistant' && message.content.trim()) return [`## MaxCode\n\n${message.content.trim()}`]
+        if (message.role === 'assistant' && message.content.trim()) return [`## OpenSol\n\n${message.content.trim()}`]
         return []
       })
       .join('\n\n')
     downloadText(
-      `maxcode-${session.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'conversation'}.md`,
+      `opensol-${session.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'conversation'}.md`,
       `# ${session.title}\n\n${body}\n`,
       'text/markdown',
     )
@@ -158,8 +184,8 @@ export function Sidebar() {
     if (!session) return
     setMenu(null)
     downloadText(
-      `maxcode-${session.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'conversation'}.json`,
-      JSON.stringify({ app: 'MaxCode', exportedAt: new Date().toISOString(), session }, null, 2),
+      `opensol-${session.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) || 'conversation'}.json`,
+      JSON.stringify({ app: 'OpenSol', exportedAt: new Date().toISOString(), session }, null, 2),
       'application/json',
     )
     notify('Conversation exported.', 'success')
@@ -168,22 +194,22 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-50 flex h-dvh w-[288px] shrink-0 flex-col border-r border-line/60 bg-canvas transition-transform duration-200 lg:static lg:z-auto',
+        'fixed inset-y-0 left-0 z-50 flex h-dvh w-[264px] shrink-0 flex-col bg-canvas shadow-float transition-transform duration-300 ease-out lg:static lg:z-auto lg:shadow-none',
         mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         sidebarCollapsed && 'lg:hidden',
       )}
     >
-      <div className="flex h-14 items-center gap-2 pl-2.5 pr-2.5">
+      <div className="flex h-12 items-center gap-1 pl-3 pr-2">
+        <LogoLockup />
         <button
           type="button"
-          className="icon-button hidden lg:inline-flex"
+          className="icon-button ml-auto hidden lg:inline-flex"
           onClick={toggleSidebar}
-          title="Collapse sidebar"
+          title="Collapse sidebar (Ctrl B)"
           aria-label="Collapse sidebar"
         >
-          <PanelLeftClose size={17} />
+          <PanelLeftClose size={16} strokeWidth={1.7} />
         </button>
-        <LogoLockup />
         <button
           type="button"
           className="icon-button ml-auto lg:hidden"
@@ -195,11 +221,13 @@ export function Sidebar() {
       </div>
 
       <nav className="space-y-0.5 px-2 pt-1">
-        <button type="button" onClick={startNewChat} className="nav-item">
-          <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-accent text-on-accent">
-            <Plus size={14} strokeWidth={2.2} />
-          </span>
-          New session
+        <button
+          type="button"
+          onClick={startNewChat}
+          className="group/new mb-2 flex h-9 w-full items-center gap-2 rounded-lg border border-line bg-panel px-2.5 text-left text-[13px] font-medium text-ink shadow-pill transition-all duration-150 hover:border-accent/40 hover:shadow-composer active:scale-[0.985]"
+        >
+          <Plus size={15} strokeWidth={2} className="text-accent transition-transform duration-300 group-hover/new:rotate-90" />
+          New chat
         </button>
         <button
           type="button"
@@ -209,7 +237,7 @@ export function Sidebar() {
           }}
           className="nav-item"
         >
-          <Sparkles size={17} strokeWidth={1.6} className="shrink-0 text-muted" />
+          <Sparkles size={15} strokeWidth={1.7} className="shrink-0 text-faint" />
           Skills
         </button>
         <button
@@ -220,8 +248,19 @@ export function Sidebar() {
           }}
           className="nav-item"
         >
-          <Package size={17} strokeWidth={1.6} className="shrink-0 text-muted" />
+          <Package size={15} strokeWidth={1.7} className="shrink-0 text-faint" />
           Plugins
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMobileOpen(false)
+            openSettings('mcp')
+          }}
+          className="nav-item"
+        >
+          <Plug size={15} strokeWidth={1.7} className="shrink-0 text-faint" />
+          MCP
         </button>
         <button
           type="button"
@@ -231,20 +270,20 @@ export function Sidebar() {
           }}
           className="nav-item"
         >
-          <Rocket size={17} strokeWidth={1.6} className="shrink-0 text-muted" />
+          <Rocket size={15} strokeWidth={1.7} className="shrink-0 text-faint" />
           Deploy
         </button>
         <div className="relative">
           <Search
-            size={17}
-            strokeWidth={1.6}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
+            size={15}
+            strokeWidth={1.7}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
           />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
-            className="h-9 w-full rounded-lg border border-transparent bg-transparent pl-[38px] pr-2.5 text-[14px] text-ink outline-none transition-colors placeholder:text-ink hover:bg-raised/70 focus:border-line focus:bg-panel focus:placeholder:text-faint"
+            className="mt-1 h-8 w-full rounded-lg border border-transparent bg-transparent pl-[34px] pr-2.5 text-[13px] text-ink outline-none transition-colors placeholder:text-muted hover:bg-raised/80 focus:border-line focus:bg-panel"
             aria-label="Search conversations"
           />
         </div>
@@ -253,7 +292,7 @@ export function Sidebar() {
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2 pt-5">
         <div className="mb-5">
           <div className="flex items-center justify-between px-2.5 pb-1.5">
-            <p className="text-[12.5px] font-medium text-muted">Workspaces</p>
+            <p className="eyebrow">Workspaces</p>
             <button
               type="button"
               onClick={() => {
@@ -284,28 +323,38 @@ export function Sidebar() {
               {workspaces.map((entry) => {
                 const active = entry.path === workspace.root
                 return (
-                  <button
-                    key={entry.path}
-                    type="button"
-                    onClick={() => void switchWorkspace(entry.path)}
-                    title={entry.path}
-                    className={cn(
-                      'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13.5px] transition-colors',
-                      active ? 'bg-raised text-ink' : 'text-ink/80 hover:bg-raised/70 hover:text-ink',
-                    )}
-                  >
-                    <Folder size={15} strokeWidth={1.6} className={cn('shrink-0', active ? 'text-accent' : 'text-faint')} />
-                    <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                    {switching === entry.path ? (
-                      <LoaderCircle size={11} className="shrink-0 animate-spin text-faint" />
-                    ) : active ? (
-                      <Check size={11} className="shrink-0 text-accent" />
-                    ) : (
-                      <span className="shrink-0 text-[10px] tabular-nums text-faint">
-                        {formatRelativeTime(entry.lastOpened)}
-                      </span>
-                    )}
-                  </button>
+                  <div key={entry.path} className="group/ws relative">
+                    <button
+                      type="button"
+                      onClick={() => void switchWorkspace(entry.path)}
+                      title={entry.path}
+                      className={cn(
+                        'flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 pr-8 text-left text-[13px] transition-all duration-150 active:scale-[0.985]',
+                        active ? 'bg-raised text-ink' : 'text-muted hover:bg-raised/80 hover:text-ink',
+                      )}
+                    >
+                      <Folder size={15} strokeWidth={1.6} className={cn('shrink-0 transition-transform duration-200 group-hover/ws:-rotate-6 group-hover/ws:scale-110', active ? 'text-accent' : 'text-faint')} />
+                      <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                      {switching === entry.path ? (
+                        <LoaderCircle size={11} className="shrink-0 animate-spin text-faint" />
+                      ) : active ? (
+                        <Check size={11} className="shrink-0 text-accent" />
+                      ) : (
+                        <span className="shrink-0 text-[10px] tabular-nums text-faint transition-opacity group-hover/ws:opacity-0">
+                          {formatRelativeTime(entry.lastOpened)}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteWorkspace(entry.path, entry.name)}
+                      className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-faint opacity-0 transition-all hover:bg-danger/10 hover:text-danger focus:opacity-100 group-hover/ws:opacity-100"
+                      title="Remove workspace from the list"
+                      aria-label={`Remove workspace ${entry.name}`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 )
               })}
             </div>
@@ -314,7 +363,7 @@ export function Sidebar() {
 
         <div>
           <div className="flex items-center justify-between px-2.5 pb-1.5">
-            <p className="text-[12.5px] font-medium text-muted">Recents</p>
+            <p className="eyebrow">Recents</p>
             <span className="text-[11px] tabular-nums text-faint">{filtered.length}</span>
           </div>
           {groups.length === 0 && (
@@ -327,12 +376,12 @@ export function Sidebar() {
               </p>
             </div>
           )}
-          {groups.map((group) => (
+          {groups.map((group, gi) => (
             <div key={group.label} className="mb-3">
-              <p className="px-2.5 pb-1 pt-1 text-[11.5px] text-faint">{group.label}</p>
+              <p className="px-2.5 pb-1 pt-1 text-[11px] font-medium text-faint/80">{group.label}</p>
               <div className="space-y-0.5">
-                {group.items.map((session) => (
-                  <div key={session.id} className="group/item relative">
+                {group.items.map((session, si) => (
+                  <div key={session.id} className="group/item relative animate-slideleft" style={{ animationDelay: `${Math.min(gi * 40 + si * 18, 320)}ms` }}>
                     {editingId === session.id ? (
                       <input
                         value={draftTitle}
@@ -346,7 +395,7 @@ export function Sidebar() {
                           }
                         }}
                         autoFocus
-                        className="h-9 w-full rounded-lg border border-accent/40 bg-panel px-2.5 text-[13.5px] text-ink outline-none"
+                        className="h-8 w-full rounded-lg border border-accent/50 bg-panel px-2.5 text-[13px] text-ink outline-none"
                         aria-label="Rename conversation"
                       />
                     ) : (
@@ -358,7 +407,7 @@ export function Sidebar() {
                           title={`${session.title} · ${formatRelativeTime(session.updatedAt)}`}
                           className={cn('sidebar-item pr-9', activeId === session.id && 'sidebar-item-active')}
                         >
-                          <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                          <span className={cn('min-w-0 flex-1 truncate', titling[session.id] && 'text-shimmer')}>{session.title}</span>
                           {streaming[session.id] && (
                             <span
                               className="flex shrink-0 items-center gap-1 text-[10.5px] font-medium text-accent group-hover/item:hidden"
@@ -379,7 +428,7 @@ export function Sidebar() {
                             }
                             const rect = event.currentTarget.getBoundingClientRect()
                             const width = 176
-                            const height = 138
+                            const height = 166
                             const x = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
                             const y =
                               rect.bottom + height + 8 > window.innerHeight
@@ -409,8 +458,8 @@ export function Sidebar() {
       </div>
 
       <div className="p-2">
-        <div className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-raised/60">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink font-display text-[14px] font-medium text-panel">
+        <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-raised/80">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-ink text-[12px] font-semibold text-panel">
             {profileName.charAt(0).toUpperCase()}
           </div>
           <button
@@ -421,8 +470,8 @@ export function Sidebar() {
             }}
             className="min-w-0 flex-1 text-left"
           >
-            <p className="truncate text-[13.5px] font-medium leading-tight text-ink">{profileName}</p>
-            <p className="truncate text-[11.5px] leading-tight text-faint">
+            <p className="truncate text-[13px] font-medium leading-tight text-ink">{profileName}</p>
+            <p className="mt-0.5 truncate text-[11px] leading-tight text-faint">
               {connected
                 ? `${getProviderName(settings.provider)}${settings.provider === 'ollama' ? ' · local' : ' · your key'}`
                 : 'Add a provider key'}
@@ -467,6 +516,13 @@ export function Sidebar() {
                     className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[11.5px] text-muted hover:bg-raised hover:text-ink"
                   >
                     <Pencil size={12} /> Rename
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void aiRename(session.id)}
+                    className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[11.5px] text-muted hover:bg-raised hover:text-ink"
+                  >
+                    <Sparkles size={12} /> Name with AI
                   </button>
                   <button
                     type="button"

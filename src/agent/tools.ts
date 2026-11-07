@@ -1,4 +1,4 @@
-import type { AgentMode, AppSettings, ToolName } from '../types'
+import type { AgentMode, AppSettings, BuiltinToolName, ToolName } from '../types'
 import { executeDaemonTool } from '../lib/daemon'
 import { useWorkspace } from '../store/workspace'
 import { kernel } from '../core/kernel'
@@ -239,7 +239,7 @@ export function getToolSchemas(
   }
 
   return tools.filter((tool) => {
-    if (!settings.tools[tool.name]?.enabled) return false
+    if (!settings.tools[tool.name as BuiltinToolName]?.enabled) return false
     if (!toolAllowedInMode(tool.name, mode)) return false
     if ((tool.name === 'web_search' || tool.name === 'read_url') && !settings.webSearchEnabled) return false
     return true
@@ -481,7 +481,7 @@ export async function executeTool(
   if (kernel.tools) {
     return await kernel.tools.execute(name, args, settings, mode, signal)
   }
-  if (!settings.tools[name]?.enabled) {
+  if (!settings.tools[name as BuiltinToolName]?.enabled) {
     return { output: 'This tool is disabled in Settings → Tools.', isError: true }
   }
   if (!toolAllowedInMode(name, mode)) {
@@ -506,7 +506,8 @@ export async function executeTool(
 }
 
 export function toolLabel(name: ToolName): string {
-  const labels: Record<ToolName, string> = {
+  if (name.startsWith('mcp__')) return name.split('__').slice(2).join(' ').replace(/_/g, ' ') || 'MCP tool'
+  const labels: Record<BuiltinToolName, string> = {
     shell: 'Shell',
     read_file: 'Read file',
     list_files: 'List files',
@@ -519,7 +520,7 @@ export function toolLabel(name: ToolName): string {
     git: 'Git',
     subagent: 'Subagent',
   }
-  return labels[name] ?? 'Tool'
+  return labels[name as BuiltinToolName] ?? 'Tool'
 }
 
 export function toolSummary(name: ToolName, args: Record<string, unknown>): string {

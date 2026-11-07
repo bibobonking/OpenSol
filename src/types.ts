@@ -87,7 +87,7 @@ export interface SecretsSummary {
 
 export type AgentMode = 'build' | 'plan'
 
-export type ToolName =
+export type BuiltinToolName =
   | 'shell'
   | 'read_file'
   | 'list_files'
@@ -99,6 +99,11 @@ export type ToolName =
   | 'read_url'
   | 'git'
   | 'subagent'
+
+/** MCP tools are exposed to the model as mcp__<server>__<tool>. */
+export type McpToolName = `mcp__${string}`
+
+export type ToolName = BuiltinToolName | McpToolName
 
 export interface ToolSetting {
   enabled: boolean
@@ -126,7 +131,7 @@ export interface AppSettings {
   systemPrompt: string
   providers: Record<string, ProviderCredentials>
   searchProvider: SearchProvider
-  tools: Record<ToolName, ToolSetting>
+  tools: Record<BuiltinToolName, ToolSetting>
   skills: Skill[]
   theme: ThemeId
   showTokenEstimate: boolean
@@ -134,6 +139,8 @@ export interface AppSettings {
   chatFontSize: number
   workDetail: 'concise' | 'detailed'
   autoCollapseWork: boolean
+  /** Let the model name a session after its first answer. */
+  aiSessionTitles: boolean
 }
 
 export interface Attachment {
@@ -187,6 +194,14 @@ export interface AssistantMessage {
   round: number
 }
 
+/** Line-level change report for a file edit: +added, −removed and where it started (1-based). */
+export interface FileDiff {
+  added: number
+  removed: number
+  line?: number
+  column?: number
+}
+
 export interface ToolMessage {
   id: string
   role: 'tool'
@@ -194,6 +209,7 @@ export interface ToolMessage {
   status: ToolRunStatus
   result?: string
   durationMs?: number
+  diff?: FileDiff
   createdAt: number
   round: number
 }
@@ -209,6 +225,39 @@ export interface ChatSession {
   provider?: ProviderId
   model?: string
   mode?: AgentMode
+  /** Workspace folder the session was started in. */
+  workspace?: string
+  /** Who last set the title; only 'auto' titles may be replaced by the AI. */
+  titleSource?: 'auto' | 'ai' | 'user'
+}
+
+export type McpStatus = 'disabled' | 'disconnected' | 'connecting' | 'connected' | 'error'
+
+export interface McpTool {
+  name: string
+  fn: McpToolName
+  description: string
+  inputSchema: Record<string, unknown>
+  readOnly: boolean
+}
+
+export interface McpServer {
+  id: string
+  name: string
+  transport: 'stdio' | 'http'
+  enabled: boolean
+  approval: 'auto' | 'ask'
+  disabledTools: string[]
+  status: McpStatus
+  error: string
+  serverInfo: { name?: string; version?: string } | null
+  connectedAt: number | null
+  tools: McpTool[]
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
 }
 
 export interface Usage {

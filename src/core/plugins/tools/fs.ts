@@ -1,6 +1,7 @@
 import type { Context } from 'cordis'
 import { executeDaemonTool } from '../../../lib/daemon'
 import { useWorkspace } from '../../../store/workspace'
+import type { FileDiff } from '../../../types'
 import type { ToolResult } from '../../types'
 
 const MAX_TOOL_OUTPUT = 28_000
@@ -52,6 +53,20 @@ function formatList(result: Record<string, unknown>): string {
   })
   const suffix = result.truncated === true ? '\n… listing truncated. Narrow the path or reduce depth.' : ''
   return `${textValue(result.root) ? `Root: ${textValue(result.root)}\n` : ''}${lines.join('\n')}${suffix}`
+}
+
+function diffOf(result: Record<string, unknown>): FileDiff | undefined {
+  const raw = record(result.diff)
+  const added = numberValue(raw.added)
+  const removed = numberValue(raw.removed)
+  if (added === undefined || removed === undefined) return undefined
+  return { added, removed, line: numberValue(raw.line), column: numberValue(raw.column) }
+}
+
+function diffLabel(diff?: FileDiff) {
+  if (!diff) return ''
+  const where = diff.line ? ` at L${diff.line}${diff.column ? `:${diff.column}` : ''}` : ''
+  return ` · +${diff.added} −${diff.removed}${where}`
 }
 
 async function refreshWorkspace() {
@@ -143,9 +158,11 @@ export function apply(ctx: Context) {
         const result = record((await executeDaemonTool('write_file', { path, content }, exec.mode, exec.signal, exec.turnId)).result)
         await refreshWorkspace()
         const verb = result.created === true ? 'Created' : 'Updated'
+        const diff = diffOf(result)
         return {
-          output: `${verb} ${textValue(result.path) || path} · ${content.split('\n').length} lines, ${numberValue(result.size) ?? content.length} bytes.`,
+          output: `${verb} ${textValue(result.path) || path} · ${content.split('\n').length} lines, ${numberValue(result.size) ?? content.length} bytes${diffLabel(diff)}.`,
           isError: false,
+          diff,
         }
       },
     }),
@@ -168,9 +185,11 @@ export function apply(ctx: Context) {
         const content = requireString(args, 'content')
         const result = record((await executeDaemonTool('rewrite_file', { path, content }, exec.mode, exec.signal, exec.turnId)).result)
         await refreshWorkspace()
+        const diff = diffOf(result)
         return {
-          output: `Rewrote ${textValue(result.path) || path} · ${content.split('\n').length} lines, ${numberValue(result.size) ?? content.length} bytes.`,
+          output: `Rewrote ${textValue(result.path) || path} · ${content.split('\n').length} lines, ${numberValue(result.size) ?? content.length} bytes${diffLabel(diff)}.`,
           isError: false,
+          diff,
         }
       },
     }),
@@ -207,9 +226,11 @@ export function apply(ctx: Context) {
           ).result,
         )
         await refreshWorkspace()
+        const diff = diffOf(result)
         return {
-          output: `Edited ${textValue(result.path) || path} · ${numberValue(result.replacements) ?? 1} replacement${numberValue(result.replacements) === 1 ? '' : 's'}.`,
+          output: `Edited ${textValue(result.path) || path} · ${numberValue(result.replacements) ?? 1} replacement${numberValue(result.replacements) === 1 ? '' : 's'}${diffLabel(diff)}.`,
           isError: false,
+          diff,
         }
       },
     }),

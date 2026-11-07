@@ -181,7 +181,7 @@ export function CommandPalette() {
       },
       {
         id: 'action-about',
-        label: 'About MaxCode',
+        label: 'About OpenSol',
         hint: 'Local storage and reset controls',
         group: 'Settings',
         icon: Info,
@@ -407,7 +407,7 @@ export function CommandPalette() {
               <kbd className="rounded border border-line bg-panel px-1">↵</kbd> open
             </span>
           </span>
-          <span>MaxCode</span>
+          <span>OpenSol</span>
         </div>
       </div>
     </div>,

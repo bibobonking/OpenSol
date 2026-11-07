@@ -1,13 +1,12 @@
 /**
  * ContextBar — compact context-usage indicator shown in the TopBar.
  *
- * Displays a small progress bar and a token percentage. When the session is
+ * Displays used / total context tokens and the percentage as plain text. When the session is
  * being compacted it shows a pulsing "Compacting…" state. Colour grades from
  * neutral → warning → danger as the context fills up.
  */
 
 import { useMemo } from 'react'
-import { AlertTriangle, Zap } from 'lucide-react'
 import type { ModelInfo, Message } from '../types'
 import { getContextUsage, AUTO_COMPACT_THRESHOLD } from '../lib/context'
 import { isCompacting } from '../agent/compact'
@@ -38,34 +37,20 @@ export function ContextBar({ messages, model, sessionId }: ContextBarProps) {
   return (
     <div
       className={cn(
-        'hidden h-6 items-center gap-1.5 rounded-full border border-line/60 bg-raised/40 px-2 text-[9.5px] sm:flex',
-        isWarning && 'border-warning/30 text-warning',
-        isDanger && 'border-danger/30 text-danger',
+        'hidden items-baseline gap-1.5 text-[11.5px] tabular-nums text-muted sm:flex',
+        isWarning && 'text-warning',
+        isDanger && 'text-danger',
       )}
-      title={`Context: ~${formatTokens(used)} / ${formatTokens(limit)} tokens (${pct}%)`}
+      title={`Context window: ~${used.toLocaleString()} of ${limit.toLocaleString()} tokens used (${pct}%)`}
     >
       {compacting ? (
-        <span className="flex animate-pulse items-center gap-1 text-accent">
-          <Zap size={9} className="shrink-0" />
-          Compacting…
-        </span>
+        <span className="text-shimmer">Compacting…</span>
       ) : (
         <>
-          {isDanger ? (
-            <AlertTriangle size={9} className="shrink-0" />
-          ) : (
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
-          )}
-          <div className="relative h-1 w-10 overflow-hidden rounded-full bg-line">
-            <div
-              className={cn(
-                'absolute inset-y-0 left-0 rounded-full transition-all duration-500',
-                isDanger ? 'bg-danger' : isWarning ? 'bg-warning' : 'bg-accent',
-              )}
-              style={{ width: `${Math.min(pct, 100)}%` }}
-            />
-          </div>
-          <span className="tabular-nums">{pct}%</span>
+          <span className="text-ink/80">{formatTokens(used)}</span>
+          <span className="text-faint">/ {formatTokens(limit)} tokens</span>
+          <span className="text-faint">·</span>
+          <span>{pct}%</span>
         </>
       )}
     </div>

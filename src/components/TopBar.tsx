@@ -46,7 +46,7 @@ export function TopBar({
   const workspace = useWorkspace((state) => state.info)
   const activeModel = useActiveModel()
 
-  // Go through the theme registry so Night Owl, Claude Code, Flame and plugin themes count as dark.
+  // Go through the theme registry so Night Owl, Claude Code, Solar and plugin themes count as dark.
   const isDark = themeIsDark(
     settings.theme,
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
@@ -55,7 +55,7 @@ export function TopBar({
   const turns = session?.messages.filter((message) => message.role === 'user').length ?? 0
 
   return (
-    <header className="relative flex h-14 shrink-0 items-center gap-2 border-b border-line/50 bg-panel/80 px-3 backdrop-blur-md sm:px-4">
+    <header className="relative flex h-12 shrink-0 items-center gap-2 border-b border-line/60 bg-panel/80 px-3 backdrop-blur-xl sm:px-4">
       <button
         type="button"
         className="icon-button lg:hidden"
@@ -79,11 +79,17 @@ export function TopBar({
 
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {!session && <LogoMark size={19} className="lg:hidden" />}
-        <h1 className="min-w-0 truncate text-[14.5px] font-medium tracking-[-0.005em] text-ink">
+        {workspace.available && (
+          <>
+            <span className="hidden max-w-[120px] shrink-0 truncate text-[13px] text-faint md:inline">{workspace.name}</span>
+            <span className="hidden text-faint/50 md:inline">/</span>
+          </>
+        )}
+        <h1 className="min-w-0 truncate text-[13.5px] font-medium tracking-[-0.01em] text-ink">
           {session?.title ?? 'New conversation'}
         </h1>
         {hasConversation && (
-          <span className="hidden shrink-0 items-center gap-1 rounded-full bg-raised/70 px-2 py-0.5 text-[11px] text-muted sm:inline-flex">
+          <span className="hidden shrink-0 items-center gap-1 rounded-md border border-line bg-canvas px-1.5 py-0.5 text-[10.5px] font-medium text-muted sm:inline-flex">
             {settings.mode === 'plan' ? <ListChecks size={11} /> : <Sparkles size={11} />}
             {settings.mode === 'plan' ? 'Plan mode' : 'Build mode'}
           </span>
@@ -96,7 +102,7 @@ export function TopBar({
       </div>
 
       {hasConversation && (
-        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center rounded-lg border border-line/60 bg-raised/70 p-0.5 md:inline-flex">
+        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center rounded-lg bg-raised p-0.5 md:inline-flex">
           {(['chat', 'trajectory'] as const).map((value) => (
             <button
               key={value}
@@ -104,7 +110,7 @@ export function TopBar({
               onClick={() => onViewChange(value)}
               aria-pressed={view === value}
               className={cn(
-                'h-7 rounded-[6px] px-3 text-[11.5px] font-medium capitalize transition-colors',
+                'h-6 rounded-md px-3 text-[11.5px] font-medium capitalize transition-all duration-200',
                 view === value ? 'bg-panel text-ink shadow-pill' : 'text-muted hover:text-ink',
               )}
             >
@@ -116,7 +122,7 @@ export function TopBar({
 
       <div className="flex shrink-0 items-center gap-0.5">
         {hasConversation && (
-          <div className="mr-1.5 hidden sm:block">
+          <div className="mr-3 hidden sm:block">
             <ContextBar messages={session?.messages ?? []} model={activeModel} sessionId={session?.id ?? null} />
           </div>
         )}
@@ -125,10 +131,10 @@ export function TopBar({
           onClick={() => setWorkspaceOpen(!workspaceOpen)}
           title={workspace.available ? workspace.root : 'Choose a workspace folder'}
           className={cn(
-            'mr-1 hidden min-w-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors sm:inline-flex',
+            'mr-1 hidden min-w-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] transition-all duration-150 sm:inline-flex',
             workspaceOpen
-              ? 'border-accent/30 bg-accent-soft/60 text-accent'
-              : 'border-line/80 text-muted hover:bg-raised/60 hover:text-ink',
+              ? 'border-accent/30 bg-accent-soft text-accent'
+              : 'border-line text-muted hover:bg-raised/60 hover:text-ink',
           )}
         >
           <FolderOpen size={13} className="shrink-0" />

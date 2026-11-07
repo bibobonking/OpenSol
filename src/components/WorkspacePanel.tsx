@@ -26,6 +26,8 @@ import { cn, formatBytes } from '../lib/utils'
 import { useUi } from '../store/ui'
 import { useWorkspace } from '../store/workspace'
 import { PreviewPane } from './PreviewPane'
+import { SessionsTab } from './SessionsTab'
+import { useChats } from '../store/chats'
 import { Spinner } from './ui'
 
 interface TreeNode {
@@ -114,7 +116,7 @@ function FolderPicker({ onDone }: { onDone?: () => void }) {
       <div className="border-b border-line px-4 py-4">
         <p className="font-display text-[19px] font-semibold tracking-[-0.02em] text-ink">Choose a real folder</p>
         <p className="mt-1 text-[11.5px] leading-relaxed text-muted">
-          MaxCode works directly in this folder through the local daemon. Nothing is uploaded.
+          OpenSol works directly in this folder through the local daemon. Nothing is uploaded.
         </p>
       </div>
 
@@ -230,7 +232,8 @@ export function WorkspacePanel() {
 
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const [tab, setTab] = useState<'files' | 'preview' | 'git'>('files')
+  const sessionCount = useChats((state) => state.sessions.length)
+  const [tab, setTab] = useState<'files' | 'preview' | 'git' | 'sessions'>('files')
   const [choosing, setChoosing] = useState(!info.available)
   const [editor, setEditor] = useState<{ mode: 'create-file' | 'create-dir' | 'rename'; value: string } | null>(
     null,
@@ -459,6 +462,16 @@ export function WorkspacePanel() {
               </button>
               <button
                 type="button"
+                onClick={() => setTab('sessions')}
+                className={cn(
+                  'h-7 rounded-md px-2.5 text-[11px] font-medium',
+                  tab === 'sessions' ? 'bg-raised text-ink' : 'text-muted hover:text-ink',
+                )}
+              >
+                Sessions <span className="text-faint">· {sessionCount}</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setTab('git')}
                 className={cn(
                   'h-7 rounded-md px-2.5 text-[11px] font-medium',
@@ -639,6 +652,8 @@ export function WorkspacePanel() {
               </>
             ) : tab === 'preview' ? (
               <PreviewPane />
+            ) : tab === 'sessions' ? (
+              <SessionsTab />
             ) : (
               <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b border-line px-3 py-3">
@@ -682,7 +697,7 @@ export function WorkspacePanel() {
                     onClick={async () => {
                       const confirmed = await askConfirm({
                         title: 'Forget this workspace?',
-                        body: 'The folder stays on disk. MaxCode stops showing it and closes the current file.',
+                        body: 'The folder stays on disk. OpenSol stops showing it and closes the current file.',
                         confirmLabel: 'Forget workspace',
                       })
                       if (confirmed) await forgetWorkspace()
