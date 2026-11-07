@@ -5,3 +5,4 @@ docs
 Guide-Make-Plugin.md
 dsh-claude-style/
 *.tsbuildinfo
+out

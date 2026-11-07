@@ -371,10 +371,11 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
                   key={entry.id}
                   type="button"
                   onClick={() => chooseProvider(entry.id)}
-                  title={`${entry.name}${ready ? '' : ' · key needed'}`}
+                  disabled={!ready}
+                  title={`${entry.name}${ready ? '' : ' · connect to enable'}`}
                   aria-pressed={selected}
                   className={cn(
-                    'relative flex h-[46px] min-w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl transition-colors md:mb-[6px] md:min-w-0',
+                    'relative flex h-[46px] min-w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-40 md:mb-[6px] md:min-w-0',
                     selected ? 'text-accent max-md:bg-accent-soft' : 'text-muted hover:bg-raised hover:text-ink',
                   )}
                 >

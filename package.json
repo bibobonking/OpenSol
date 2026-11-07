@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node server/opensol.mjs start && vite",
     "build": "tsc -b && vite build",
+    "artifacts": "node scripts/pull-artifacts.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty",
     "test": "node --test",
