@@ -1,0 +1,9 @@
+node_modules
+.superpowers
+docs
+.claude
+Guide-Make-Plugin.md
+dsh-claude-style/
+*.tsbuildinfo
+out
+scripts

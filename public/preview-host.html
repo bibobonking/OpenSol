@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenSol preview</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #fff;
+        color: #1f1f1d;
+        font: 13px/1.5 system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      // Hosts model-written HTML inside a sandboxed frame (no same-origin access). The parent
+      // posts the document once this page reports it is ready.
+      window.addEventListener('message', function (event) {
+        if (event.source !== window.parent) return
+        var data = event.data
+        if (!data || data.type !== 'maxcode-preview' || typeof data.html !== 'string') return
+        document.open()
+        document.write(data.html)
+        document.close()
+      })
+      window.parent.postMessage({ type: 'maxcode-preview-ready' }, '*')
+    </script>
+  </body>
+</html>
