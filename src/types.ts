@@ -231,6 +231,7 @@ export interface ChatSession {
   titleSource?: 'auto' | 'ai' | 'user'
 }
 
+<<<<<<< HEAD
 export type McpStatus = 'disabled' | 'disconnected' | 'connecting' | 'connected' | 'needs_auth' | 'error'
 
 export type McpTransport = 'stdio' | 'http' | 'sse'
@@ -243,6 +244,9 @@ export interface McpOAuth {
   scope: string
   authorized: boolean
 }
+=======
+export type McpStatus = 'disabled' | 'disconnected' | 'connecting' | 'connected' | 'error'
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 
 export interface McpTool {
   name: string
@@ -255,7 +259,11 @@ export interface McpTool {
 export interface McpServer {
   id: string
   name: string
+<<<<<<< HEAD
   transport: McpTransport
+=======
+  transport: 'stdio' | 'http'
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   enabled: boolean
   approval: 'auto' | 'ask'
   disabledTools: string[]
@@ -269,7 +277,10 @@ export interface McpServer {
   env?: Record<string, string>
   url?: string
   headers?: Record<string, string>
+<<<<<<< HEAD
   oauth?: McpOAuth | null
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 }
 
 export interface Usage {

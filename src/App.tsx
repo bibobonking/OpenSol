@@ -4,7 +4,10 @@ import { ChatView } from './components/ChatView'
 import { WorkspacePanel } from './components/WorkspacePanel'
 import { SettingsModal } from './components/SettingsModal'
 import { DeployModal } from './components/DeployModal'
+<<<<<<< HEAD
 import { McpPanel } from './components/McpPanel'
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 import { CommandPalette } from './components/CommandPalette'
 import { Splash } from './components/Splash'
 import { ConfirmDialog, ToastHost } from './components/ui'
@@ -139,7 +142,10 @@ export default function App() {
             <WorkspacePanel />
           </div>
           <SettingsModal />
+<<<<<<< HEAD
           <McpPanel />
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
           <DeployModal />
           <CommandPalette />
           <ConfirmDialog />

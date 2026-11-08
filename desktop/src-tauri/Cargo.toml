@@ -2,7 +2,11 @@
 name = "opensol-desktop"
 version = "3.1.0"
 description = "OpenSol Desktop — the OpenSol coding agent in a native window (system webview)."
+<<<<<<< HEAD
 authors = ["OpenSoftX"]
+=======
+authors = ["OpenSoft"]
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 edition = "2021"
 rust-version = "1.77"
 

@@ -55,8 +55,11 @@ interface UiState {
   setMobileSidebarOpen: (open: boolean) => void
   workspaceOpen: boolean
   setWorkspaceOpen: (open: boolean) => void
+<<<<<<< HEAD
   mcpOpen: boolean
   setMcpOpen: (open: boolean) => void
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   settingsOpen: boolean
   settingsTab:
     | 'general'
@@ -113,8 +116,11 @@ export const useUi = create<UiState>()((set, get) => ({
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   workspaceOpen: false,
   setWorkspaceOpen: (open) => set({ workspaceOpen: open }),
+<<<<<<< HEAD
   mcpOpen: false,
   setMcpOpen: (open) => set({ mcpOpen: open, ...(open ? { mobileSidebarOpen: false, settingsOpen: false } : {}) }),
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   settingsOpen: false,
   settingsTab: 'general',
   openSettings: (tab = 'general') => set({ settingsOpen: true, settingsTab: tab, mobileSidebarOpen: false }),

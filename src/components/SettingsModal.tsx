@@ -61,7 +61,11 @@ import { PERMISSION_MODES, permissionMode, permissionTools } from '../lib/permis
 import { cn, formatBytes, readFileAsText } from '../lib/utils'
 import { LogoMark } from './Logo'
 import { PluginManager } from './PluginManager'
+<<<<<<< HEAD
 import { useMcp } from '../store/mcp'
+=======
+import { McpTab } from './McpTab'
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 import { pluginRuntime } from '../plugins'
 import { Modal, Segmented, Spinner, Switch } from './ui'
 
@@ -72,7 +76,11 @@ const TABS = [
   { id: 'search', label: 'Search', icon: Globe2, description: 'Give the agent current web results with your own key.' },
   { id: 'skills', label: 'Skills', icon: Sparkles, description: 'Instructions added to every request when enabled.' },
   { id: 'plugins', label: 'Plugins', icon: Package, description: 'Install local plugin packages, review what they ask for, and run them once you trust the code.' },
+<<<<<<< HEAD
   { id: 'mcp', label: 'MCP', icon: Link2, description: 'Model Context Protocol servers now have their own panel, with OAuth sign-in and local, HTTP and SSE connections.' },
+=======
+  { id: 'mcp', label: 'MCP', icon: Link2, description: 'Connect Model Context Protocol servers and choose which of their tools the agent may call.' },
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   { id: 'deploy', label: 'Deploy', icon: Rocket, description: 'Hosting credentials and command-line tools.' },
   { id: 'appearance', label: 'Appearance', icon: Palette, description: 'Theme and interface preferences.' },
   { id: 'about', label: 'About', icon: Info, description: 'Local storage, history and reset controls.' },
@@ -1792,10 +1800,17 @@ function AboutTab() {
               <h3 className="font-display text-[20px] font-semibold tracking-[-0.03em] text-ink">OpenSol</h3>
               <span className="text-[10px] text-faint">v{daemon?.version ?? '1.0.0'}</span>
             </div>
+<<<<<<< HEAD
             <p className="mt-0.5 text-[10.5px] font-medium text-muted">An OpenSoftX product</p>
             <p className="mt-2 max-w-[520px] text-[10.5px] leading-relaxed text-muted">
               A local-first coding agent with a real workspace, shell, git, web research, subagents and deploy flows.
               No OpenSol account and no OpenSoftX server. Your keys never leave this machine.
+=======
+            <p className="mt-0.5 text-[10.5px] font-medium text-muted">A OpenSoft product</p>
+            <p className="mt-2 max-w-[520px] text-[10.5px] leading-relaxed text-muted">
+              A local-first coding agent with a real workspace, shell, git, web research, subagents and deploy flows.
+              No OpenSol account and no OpenSoft server. Your keys never leave this machine.
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
             </p>
           </div>
         </div>
@@ -1950,6 +1965,7 @@ function AboutTab() {
   )
 }
 
+<<<<<<< HEAD
 function McpLauncher() {
   const servers = useMcp((state) => state.servers)
   const loaded = useMcp((state) => state.loaded)
@@ -1988,6 +2004,8 @@ function McpLauncher() {
   )
 }
 
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 export function SettingsModal() {
   const open = useUi((state) => state.settingsOpen)
   const tab = useUi((state) => state.settingsTab)
@@ -2114,7 +2132,11 @@ export function SettingsModal() {
               {tab === 'search' && <SearchTab />}
               {tab === 'skills' && <SkillsTab />}
               {tab === 'plugins' && <PluginsTab />}
+<<<<<<< HEAD
               {tab === 'mcp' && <McpLauncher />}
+=======
+              {tab === 'mcp' && <McpTab />}
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
               {tab === 'deploy' && <DeployTab />}
               {tab === 'appearance' && <AppearanceTab />}
               {tab === 'about' && <AboutTab />}

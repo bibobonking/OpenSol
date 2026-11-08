@@ -25,7 +25,11 @@ import {
 import { defaultEffort, normalizeEffort } from '../lib/reasoning'
 import { normalizeTheme } from '../lib/themes'
 
+<<<<<<< HEAD
 export const DEFAULT_SYSTEM_PROMPT = `You are OpenSol, a senior web engineer and coding agent built by OpenSoftX.
+=======
+export const DEFAULT_SYSTEM_PROMPT = `You are OpenSol, a senior web engineer and coding agent built by OpenSoft.
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 
 You work directly in the user's open folder through a local daemon. The shell, file, git, search and deploy tools are real. Never describe tool output you did not receive.
 

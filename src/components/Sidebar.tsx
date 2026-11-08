@@ -56,7 +56,10 @@ export function Sidebar() {
   const openSettings = useUi((state) => state.openSettings)
   const setWorkspaceOpen = useUi((state) => state.setWorkspaceOpen)
   const setDeployOpen = useUi((state) => state.setDeployOpen)
+<<<<<<< HEAD
   const setMcpOpen = useUi((state) => state.setMcpOpen)
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   const askConfirm = useUi((state) => state.askConfirm)
   const notify = useUi((state) => state.notify)
   const focusComposer = useUi((state) => state.focusComposer)
@@ -256,7 +259,11 @@ export function Sidebar() {
           type="button"
           onClick={() => {
             setMobileOpen(false)
+<<<<<<< HEAD
             setMcpOpen(true)
+=======
+            openSettings('mcp')
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
           }}
           className="nav-item"
         >

@@ -35,7 +35,11 @@ export function LogoLockup({ compact = false }: { compact?: boolean }) {
 export function BrandFooter() {
   return (
     <p className="text-[11px] tracking-[0.01em] text-faint">
+<<<<<<< HEAD
       OpenSol <span className="px-1 text-line">/</span> by OpenSoftX
+=======
+      OpenSol <span className="px-1 text-line">/</span> by OpenSoft
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
     </p>
   )
 }

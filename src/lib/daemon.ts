@@ -280,8 +280,12 @@ export function removeWorkspaceFromList(path: string): Promise<WorkspaceInfo> {
   return api(`/api/workspaces?path=${encodeURIComponent(path)}`, { method: 'DELETE' })
 }
 
+<<<<<<< HEAD
 export type { McpServerInput } from './mcp-config'
 import type { McpServerInput } from './mcp-config'
+=======
+export type McpServerInput = Partial<McpServer> & { name: string }
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 
 export function mcpList(): Promise<{ servers: McpServer[] }> {
   return api('/api/mcp')
@@ -295,6 +299,7 @@ export function mcpAction(id: string, action: 'connect' | 'disconnect' | 'refres
   return api(`/api/mcp/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: '{}' })
 }
 
+<<<<<<< HEAD
 export function mcpAuthorize(id: string): Promise<{ url: string }> {
   return api(`/api/mcp/${encodeURIComponent(id)}/authorize`, { method: 'POST', body: '{}' })
 }
@@ -303,6 +308,8 @@ export function mcpLogout(id: string): Promise<{ servers: McpServer[] }> {
   return api(`/api/mcp/${encodeURIComponent(id)}/logout`, { method: 'POST', body: '{}' })
 }
 
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 export function mcpCall(
   server: string,
   tool: string,

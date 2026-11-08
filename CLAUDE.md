@@ -26,10 +26,13 @@ The React app in `src/` never talks to a provider or the filesystem directly. It
 
 The daemon is documented as zero-runtime-dependency, but `shared/plugin-package.mjs` imports `fflate` from `node_modules` at runtime (`server/lib/plugins.mjs` imports it). That dependency is *not* bundled — a `node_modules`-free copy of the app cannot load plugins.
 
+<<<<<<< HEAD
 ## MCP
 
 `server/lib/mcp.mjs` owns every connection (stdio, Streamable HTTP, legacy SSE). Remote servers may set `oauth: { enabled }`: on a 401 the server becomes `needs_auth`, the MCP panel (`src/components/McpPanel.tsx`) calls `POST /api/mcp/:id/authorize`, and the provider redirects to `/oauth/mcp/callback`. That one route is handled *before* `guardRequest` (the redirect is cross-site); the one-time `state` is its CSRF guard. Clients and tokens live in `secrets.enc` under `mcpOAuth`, never in `state.json`.
 
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 ## Agent loop
 
 `src/agent/index.ts` runs the whole loop in the browser, up to `MAX_ROUNDS` rounds. Each round appends one `AssistantMessage`, executes its tool calls, appends `ToolMessage`s, then loops.

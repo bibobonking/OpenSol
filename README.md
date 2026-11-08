@@ -1,6 +1,10 @@
 # OpenSol
 
+<<<<<<< HEAD
 A local-first AI coding agent by OpenSoftX. OpenSol pairs a warm React chat interface with a zero-dependency Node daemon that owns the real workspace, shell, git, search, deploy and provider credentials on your machine.
+=======
+A local-first AI coding agent by OpenSoft. OpenSol pairs a warm React chat interface with a zero-dependency Node daemon that owns the real workspace, shell, git, search, deploy and provider credentials on your machine.
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 
 The daemon binds to `127.0.0.1` only. It serves the prebuilt app from `dist/` and stores everything under `~/.maxcode`. API keys and hosting tokens are encrypted with AES-256-GCM using a local `master.key`; the browser only ever receives a masked hint.
 
@@ -64,7 +68,11 @@ OpenCode free-tier models only work inside OpenCode itself, so they are hidden h
 - `secrets.enc` and `master.key` are created with mode `600`.
 - All API routes require the local session cookie and a CSRF header; Host and Origin are checked.
 - The daemon rejects code execution outside the selected workspace except for an explicit, existing deploy folder.
+<<<<<<< HEAD
 - No telemetry or OpenSoftX-hosted proxy. Provider requests go directly from the daemon to the provider you configured.
+=======
+- No telemetry or OpenSoft-hosted proxy. Provider requests go directly from the daemon to the provider you configured.
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 
 ## Stack
 

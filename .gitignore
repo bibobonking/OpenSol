@@ -6,4 +6,7 @@ Guide-Make-Plugin.md
 dsh-claude-style/
 *.tsbuildinfo
 out
+<<<<<<< HEAD
 scripts
+=======
+>>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
