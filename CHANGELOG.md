@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.5 - Fix Bug cannot get property "sessions" without inject
+
+- fixed bug cannot get property "sessions" without inject!
+
 ## 3.1.5 - Update Log
 
 - Agent loop: removed the 16-round cap (also for subagents). Provider errors now retry up to 5 times with backoff, only for transient errors (429 bursts, 5xx, overload, network); quota, credit and "limit reached" errors are never retried.
