@@ -181,10 +181,7 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
   const listRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
-<<<<<<< HEAD
   const railRef = useRef<HTMLElement>(null)
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   const provider = settings.provider
   const models = useModelCatalog((state) => state.byProvider[provider]) ?? NO_MODELS
   const loading = useModelCatalog((state) => Boolean(state.loading[provider]))
@@ -233,11 +230,7 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
   }, [query, provider])
 
   useEffect(() => {
-<<<<<<< HEAD
     listRef.current?.querySelector<HTMLElement>(`[data-row="${cursor}"]`)?.scrollIntoView({ block: 'center' })
-=======
-    listRef.current?.querySelector<HTMLElement>(`[data-row="${cursor}"]`)?.scrollIntoView({ block: 'nearest' })
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   }, [cursor])
 
   const choose = (model: ModelInfo) => {
@@ -289,7 +282,6 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-<<<<<<< HEAD
   // Keep the active provider in view: the rail scrolls and the selected one can sit far down.
   useEffect(() => {
     if (!open) return
@@ -297,8 +289,6 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
     return () => cancelAnimationFrame(frame)
   }, [open, provider])
 
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   if (!open) return null
 
   const needsKey = !connectedNow && !keyless
@@ -373,20 +363,13 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
         <div className="relative flex min-h-0 flex-1 flex-col border-t border-line md:flex-row">
           {/* Provider rail */}
           <nav
-<<<<<<< HEAD
             ref={railRef}
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
             aria-label="Providers"
             className="thin-scroll relative flex shrink-0 gap-1.5 overflow-x-auto border-b border-line bg-canvas/70 p-2 md:w-[78px] md:flex-col md:overflow-y-auto md:overflow-x-hidden md:border-b-0 md:border-r md:p-2.5"
           >
             <span
               aria-hidden
-<<<<<<< HEAD
               className="deck-rail-glow pointer-events-none absolute left-2.5 top-2.5 hidden h-[46px] w-[calc(100%-20px)] rounded-2xl bg-accent-soft ring-1 ring-accent/40 transition-transform duration-500 ease-spring md:block"
-=======
-              className="deck-rail-glow pointer-events-none absolute left-2.5 hidden h-[46px] w-[calc(100%-20px)] rounded-2xl bg-accent-soft ring-1 ring-accent/40 transition-transform duration-500 ease-spring md:block"
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
               style={{ transform: `translateY(${railIndex * 52}px)` }}
             />
             {PROVIDERS.map((entry) => {
@@ -401,11 +384,7 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
                   title={`${entry.name}${ready ? '' : ' · connect to enable'}`}
                   aria-pressed={selected}
                   className={cn(
-<<<<<<< HEAD
                     'relative flex h-[46px] min-w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-40 md:min-w-0',
-=======
-                    'relative flex h-[46px] min-w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl transition-colors disabled:cursor-not-allowed disabled:opacity-40 md:mb-[6px] md:min-w-0',
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
                     selected ? 'text-accent max-md:bg-accent-soft' : 'text-muted hover:bg-raised hover:text-ink',
                   )}
                 >

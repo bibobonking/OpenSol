@@ -7,11 +7,7 @@ export const PROVIDERS: ProviderDef[] = [
     format: 'openai',
     baseUrl: 'https://api.openai.com/v1',
     keyHint: 'sk-…',
-<<<<<<< HEAD
     note: 'GPT and Codex models. Requests are made by your local daemon, never by OpenSoftX.',
-=======
-    note: 'GPT and Codex models. Requests are made by your local daemon, never by OpenSoft.',
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   },
   {
     id: 'anthropic',

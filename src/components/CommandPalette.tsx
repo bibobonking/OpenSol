@@ -11,10 +11,7 @@ import {
   MessageSquare,
   Moon,
   Palette,
-<<<<<<< HEAD
   Plug,
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   Plus,
   Rocket,
   Search,
@@ -43,10 +40,7 @@ export function CommandPalette() {
   const open = useUi((state) => state.paletteOpen)
   const setOpen = useUi((state) => state.setPaletteOpen)
   const openSettings = useUi((state) => state.openSettings)
-<<<<<<< HEAD
   const setMcpOpen = useUi((state) => state.setMcpOpen)
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   const setWorkspaceOpen = useUi((state) => state.setWorkspaceOpen)
   const setDeployOpen = useUi((state) => state.setDeployOpen)
   const focusComposer = useUi((state) => state.focusComposer)
@@ -155,7 +149,6 @@ export function CommandPalette() {
         },
       },
       {
-<<<<<<< HEAD
         id: 'action-mcp',
         label: 'MCP servers',
         hint: 'Connections, OAuth sign-in and tools',
@@ -167,8 +160,6 @@ export function CommandPalette() {
         },
       },
       {
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
         id: 'action-skills',
         label: 'Skills',
         hint: 'Load and manage reusable instructions',
@@ -263,11 +254,7 @@ export function CommandPalette() {
       }))
 
     return [...actions, ...chatCommands, ...fileCommands]
-<<<<<<< HEAD
   }, [sessions, entries, focusComposer, notify, openSettings, setMcpOpen, setOpen, setWorkspaceOpen, setDeployOpen])
-=======
-  }, [sessions, entries, focusComposer, notify, openSettings, setOpen, setWorkspaceOpen, setDeployOpen])
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()

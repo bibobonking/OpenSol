@@ -62,11 +62,7 @@ export function Splash({
           ))}
         </h1>
         <p className="mt-2 animate-fade text-[11px] font-medium uppercase tracking-[0.22em] text-faint [animation-delay:1s]">
-<<<<<<< HEAD
           by OpenSoftX
-=======
-          by OpenSoft
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
         </p>
 
         {phase === 'error' ? (

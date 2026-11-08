@@ -1,13 +1,8 @@
-<<<<<<< HEAD
 // Minimal Model Context Protocol client (stdio, Streamable HTTP, legacy HTTP+SSE, OAuth), zero dependencies.
-=======
-// Minimal Model Context Protocol client (stdio + Streamable HTTP), zero dependencies.
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 // The daemon owns every connection: the browser only sees tool metadata and results.
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import { HttpError } from './http.mjs'
-<<<<<<< HEAD
 import {
   AuthRequiredError,
   PendingAuthorizations,
@@ -19,8 +14,6 @@ import {
   registerClient,
   tokenIsFresh,
 } from './mcp-oauth.mjs'
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 
 const PROTOCOL_VERSION = '2025-03-26'
 const CONNECT_TIMEOUT_MS = 60_000
@@ -209,7 +202,6 @@ async function readSse(response, wantedId) {
   throw new Error('The MCP server closed the stream without answering.')
 }
 
-<<<<<<< HEAD
 /** Parses a text/event-stream response into { event, data } records. */
 async function* sseEvents(response, signal) {
   const reader = response.body.getReader()
@@ -280,45 +272,20 @@ class HttpTransport {
   constructor(config, { auth } = {}) {
     this.config = config
     this.auth = auth
-=======
-/** Streamable HTTP transport: one POST per message, JSON or SSE replies. */
-class HttpTransport {
-  constructor(config) {
-    this.config = config
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
     this.sessionId = ''
   }
 
   async start() {
-<<<<<<< HEAD
     checkRemoteUrl(this.config.url)
   }
 
   #headers() {
     return remoteHeaders(this.config, this.auth, {
-=======
-    let parsed
-    try {
-      parsed = new URL(this.config.url)
-    } catch {
-      throw new Error('The MCP server URL is not valid.')
-    }
-    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('MCP servers must use http or https.')
-  }
-
-  #headers() {
-    return {
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
       'MCP-Protocol-Version': PROTOCOL_VERSION,
       ...(this.sessionId ? { 'Mcp-Session-Id': this.sessionId } : {}),
-<<<<<<< HEAD
     })
-=======
-      ...(this.config.headers ?? {}),
-    }
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   }
 
   async request(method, params, timeoutMs = REQUEST_TIMEOUT_MS) {
@@ -326,7 +293,6 @@ class HttpTransport {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
-<<<<<<< HEAD
       const response = await authedFetch(
         this.config.url,
         async () => ({
@@ -337,14 +303,6 @@ class HttpTransport {
         }),
         this.auth,
       )
-=======
-      const response = await fetch(this.config.url, {
-        method: 'POST',
-        headers: this.#headers(),
-        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
-        signal: controller.signal,
-      })
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
       const session = response.headers.get('mcp-session-id')
       if (session) this.sessionId = session
       if (!response.ok) {
@@ -365,7 +323,6 @@ class HttpTransport {
   }
 
   async notify(method, params) {
-<<<<<<< HEAD
     const response = await authedFetch(
       this.config.url,
       async () => ({
@@ -376,14 +333,6 @@ class HttpTransport {
       }),
       this.auth,
     )
-=======
-    const response = await fetch(this.config.url, {
-      method: 'POST',
-      headers: this.#headers(),
-      body: JSON.stringify({ jsonrpc: '2.0', method, params }),
-      signal: AbortSignal.timeout(15_000),
-    })
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
     await response.body?.cancel().catch(() => undefined)
   }
 
@@ -391,17 +340,12 @@ class HttpTransport {
     if (!this.sessionId) return
     await fetch(this.config.url, {
       method: 'DELETE',
-<<<<<<< HEAD
       headers: await this.#headers(),
-=======
-      headers: this.#headers(),
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
       signal: AbortSignal.timeout(3000),
     }).catch(() => undefined)
   }
 }
 
-<<<<<<< HEAD
 /**
  * Legacy HTTP+SSE transport (protocol 2024-11-05): a long-lived GET stream carries every
  * server message; the first `endpoint` event names the URL that requests are POSTed to.
@@ -533,8 +477,6 @@ class SseTransport {
   }
 }
 
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 function slug(value, max) {
   return (
     String(value ?? '')
@@ -581,11 +523,7 @@ export function sanitizeServerConfig(input, existing) {
   const raw = input && typeof input === 'object' ? input : {}
   const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 60) : ''
   if (!name) throw new HttpError(400, 'Give each MCP server a name.', 'bad_mcp')
-<<<<<<< HEAD
   const transport = raw.transport === 'http' || raw.transport === 'sse' ? raw.transport : 'stdio'
-=======
-  const transport = raw.transport === 'http' ? 'http' : 'stdio'
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   const id =
     typeof raw.id === 'string' && /^[a-z0-9][a-z0-9-]{0,39}$/.test(raw.id)
       ? raw.id
@@ -632,7 +570,6 @@ export function sanitizeServerConfig(input, existing) {
       if (!/^[A-Za-z0-9-]{1,80}$/.test(key)) delete headers[key]
     }
     config.headers = headers
-<<<<<<< HEAD
     const oauth = raw.oauth && typeof raw.oauth === 'object' && raw.oauth.enabled ? raw.oauth : null
     if (oauth) {
       const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '')
@@ -643,8 +580,6 @@ export function sanitizeServerConfig(input, existing) {
         scope: text(oauth.scope, 400),
       }
     }
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   }
   return config
 }
@@ -654,7 +589,6 @@ export class McpManager {
     this.configs = new Map()
     this.runtime = new Map()
     this.getCwd = async () => os.homedir()
-<<<<<<< HEAD
     this.pendingAuth = new PendingAuthorizations()
     this.refreshing = new Map()
     // OAuth client + tokens per server. The daemon swaps in the encrypted secrets file.
@@ -771,8 +705,6 @@ export class McpManager {
       this.runtime.set(id, { status: 'needs_auth', error: '', tools: [], authorized: false })
     }
     return config ? this.view(config) : null
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   }
 
   async setConfigs(configs) {
@@ -804,7 +736,6 @@ export class McpManager {
       error: state.error ?? '',
       serverInfo: state.serverInfo ?? null,
       connectedAt: state.connectedAt ?? null,
-<<<<<<< HEAD
       oauth: config.oauth?.enabled
         ? {
             enabled: true,
@@ -814,8 +745,6 @@ export class McpManager {
             authorized: state.authorized === true,
           }
         : null,
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
       tools: (state.tools ?? []).map((tool) => ({
         name: tool.name,
         fn: functionName(config.id, tool.name),
@@ -840,7 +769,6 @@ export class McpManager {
     const state = { status: 'connecting', error: '', tools: [] }
     this.runtime.set(id, state)
     try {
-<<<<<<< HEAD
       const onNotification = (method) => {
         if (method === 'notifications/tools/list_changed') void this.refresh(id).catch(() => undefined)
       }
@@ -855,20 +783,6 @@ export class McpManager {
       state.authorized = Boolean(auth && (await this.authStore.get(id))?.tokens)
       await transport.start()
       if (config.transport !== 'http') {
-=======
-      const transport =
-        config.transport === 'http'
-          ? new HttpTransport(config)
-          : new StdioTransport(config, {
-              cwd: await this.getCwd(),
-              onNotification: (method) => {
-                if (method === 'notifications/tools/list_changed') void this.refresh(id).catch(() => undefined)
-              },
-            })
-      state.transport = transport
-      await transport.start()
-      if (config.transport === 'stdio') {
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
         transport.onExit = (error) => {
           if (this.runtime.get(id) === state && state.status === 'connected') {
             state.status = 'error'
@@ -890,7 +804,6 @@ export class McpManager {
       state.tools = await this.#listTools(transport)
       state.status = 'connected'
       state.connectedAt = Date.now()
-<<<<<<< HEAD
       state.authorized = Boolean(auth && (await this.authStore.get(id))?.tokens)
     } catch (error) {
       if (error instanceof AuthRequiredError) {
@@ -907,11 +820,6 @@ export class McpManager {
         state.status = 'error'
         state.error = error instanceof Error ? error.message : 'Could not connect.'
       }
-=======
-    } catch (error) {
-      state.status = 'error'
-      state.error = error instanceof Error ? error.message : 'Could not connect.'
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
       await state.transport?.close().catch(() => undefined)
       state.transport = null
     }
@@ -962,11 +870,7 @@ export class McpManager {
     const state = this.runtime.get(id)
     if (!config) throw new HttpError(404, 'Unknown MCP server.', 'mcp_missing')
     if (!state?.transport || state.status !== 'connected') {
-<<<<<<< HEAD
       throw new HttpError(409, `${config.name} is not connected. Reconnect it in the MCP panel.`, 'mcp_disconnected')
-=======
-      throw new HttpError(409, `${config.name} is not connected. Reconnect it in Settings → MCP.`, 'mcp_disconnected')
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
     }
     if ((config.disabledTools ?? []).includes(toolName)) {
       throw new HttpError(403, `${toolName} is turned off for ${config.name}.`, 'mcp_tool_disabled')
@@ -979,7 +883,6 @@ export class McpManager {
       return { text: flattenContent(result), isError: result?.isError === true }
     } catch (error) {
       if (error instanceof RpcError) return { text: error.message, isError: true }
-<<<<<<< HEAD
       if (error instanceof AuthRequiredError) {
         state.status = 'needs_auth'
         state.authorized = false
@@ -988,8 +891,6 @@ export class McpManager {
         state.transport = null
         throw new HttpError(401, `${config.name} needs you to sign in again. Open the MCP panel and press Authorize.`, 'mcp_auth')
       }
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
       throw new HttpError(502, error instanceof Error ? error.message : 'The MCP call failed.', 'mcp_failed')
     }
   }

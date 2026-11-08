@@ -18,10 +18,7 @@ import {
   streamFile,
 } from './lib/http.mjs'
 import {
-<<<<<<< HEAD
   saveSecrets,
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   addWorkspace,
   DATA_DIR,
   dataPaths,
@@ -549,7 +546,6 @@ async function handlePreview(req, res, rawPath) {
   streamFile(req, res, target.absolute, info.size, { 'Cache-Control': 'no-store' })
 }
 
-<<<<<<< HEAD
 function oauthResultPage(ok, message) {
   const safe = String(message).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenSol · MCP sign-in</title><style>body{margin:0;min-height:100dvh;display:grid;place-items:center;font:15px system-ui,sans-serif;background:#faf9f5;color:#1f1e1d}main{max-width:360px;padding:32px;text-align:center}h1{font-size:20px;margin:0 0 8px}p{margin:0;color:#6b6a68;line-height:1.5}.dot{width:44px;height:44px;border-radius:50%;margin:0 auto 16px;display:grid;place-items:center;color:#fff;font-size:22px;background:${ok ? '#2f9e6b' : '#c4443a'}}@media(prefers-color-scheme:dark){body{background:#141413;color:#f2f1ee}p{color:#a5a39e}}</style></head><body><main><div class="dot">${ok ? '✓' : '!'}</div><h1>${ok ? 'Signed in' : 'Sign-in failed'}</h1><p>${safe}</p></main><script>try{var c=new BroadcastChannel('opensol-mcp-oauth');c.postMessage({ok:${ok ? 'true' : 'false'}});c.close()}catch(e){}${ok ? 'setTimeout(function(){window.close()},900)' : ''}</script></body></html>`
@@ -585,23 +581,18 @@ async function handleMcpOAuthCallback(req, res, url) {
   }
 }
 
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 async function route(req, res) {
   const rawPath = (req.url ?? '/').split('?')[0]
   if (rawPath.startsWith('/preview/')) {
     await handlePreview(req, res, rawPath)
     return
   }
-<<<<<<< HEAD
   if (rawPath === '/oauth/mcp/callback' && req.method === 'GET') {
     // The browser arrives here from the authorization server, so Sec-Fetch-Site is cross-site.
     // The one-time `state` created by an authenticated request is the CSRF protection.
     await handleMcpOAuthCallback(req, res, new URL(req.url ?? '/', `http://${req.headers.host}`))
     return
   }
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   guardRequest(req)
   const url = new URL(req.url ?? '/', `http://${req.headers.host}`)
   const pathname = url.pathname
@@ -836,14 +827,11 @@ async function route(req, res) {
         return config
       })
       await saveMcpServers(configs)
-<<<<<<< HEAD
       // Tokens belong to one server URL: drop them when the server is removed, moved, or OAuth is turned off.
       for (const [id, old] of previous) {
         const next = configs.find((config) => config.id === id)
         if (!next || next.url !== old.url || !next.oauth?.enabled) await mcp.authStore.delete(id).catch(() => undefined)
       }
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
       await mcp.setConfigs(configs)
       for (const config of configs) {
         const runtime = mcp.runtime.get(config.id)
@@ -864,7 +852,6 @@ async function route(req, res) {
       return
     }
 
-<<<<<<< HEAD
     const mcpAuthRoute = /^\/api\/mcp\/([a-z0-9][a-z0-9-]{0,39})\/(authorize|logout)$/.exec(pathname)
     if (mcpAuthRoute && method === 'POST') {
       const [, id, action] = mcpAuthRoute
@@ -878,8 +865,6 @@ async function route(req, res) {
       return
     }
 
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
     if (pathname === '/api/mcp/call' && method === 'POST') {
       const body = await readJson(req, 4 * 1024 * 1024)
       const result = await mcp.callTool(String(body.server ?? ''), String(body.tool ?? ''), body.args ?? {})
@@ -1122,7 +1107,6 @@ async function findPort(start) {
 export async function startServer({ port: requested = 4174, open = false } = {}) {
   await mkdir(DATA_DIR, { recursive: true, mode: 0o700 })
   mcp.getCwd = async () => (await workspaceRoot().catch(() => '')) || os.homedir()
-<<<<<<< HEAD
   // OAuth clients and tokens live in the encrypted secrets file, never in state.json.
   mcp.authStore = {
     get: async (id) => (await loadSecrets()).mcpOAuth?.[id] ?? null,
@@ -1137,8 +1121,6 @@ export async function startServer({ port: requested = 4174, open = false } = {})
       await saveSecrets({ ...secrets, mcpOAuth: rest })
     },
   }
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   await mcp.setConfigs(await getMcpServers())
   void mcp.connectAll().catch(() => undefined)
   port = requested === 0 ? await findPort(4174) : requested

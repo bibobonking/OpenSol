@@ -1,10 +1,6 @@
 import { create } from 'zustand'
 import type { McpServer, McpTool, McpToolName } from '../types'
-<<<<<<< HEAD
 import { mcpAction, mcpAuthorize, mcpList, mcpLogout, mcpSave, type McpServerInput } from '../lib/daemon'
-=======
-import { mcpAction, mcpList, mcpSave, type McpServerInput } from '../lib/daemon'
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
 
 interface McpState {
   servers: McpServer[]
@@ -14,12 +10,9 @@ interface McpState {
   load: () => Promise<void>
   save: (servers: McpServerInput[]) => Promise<void>
   act: (id: string, action: 'connect' | 'disconnect' | 'refresh') => Promise<void>
-<<<<<<< HEAD
   /** Opens the provider's consent page; resolves once the popup was opened. */
   authorize: (id: string) => Promise<void>
   logout: (id: string) => Promise<void>
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
   lookup: (fn: string) => { server: McpServer; tool: McpTool } | null
 }
 
@@ -62,7 +55,6 @@ export const useMcp = create<McpState>()((set, get) => {
       const result = await mcpAction(id, action)
       apply(result.servers)
     },
-<<<<<<< HEAD
     authorize: async (id) => {
       const { url } = await mcpAuthorize(id)
       const popup = window.open(url, 'opensol-mcp-oauth', 'popup=yes,width=520,height=720')
@@ -81,8 +73,6 @@ export const useMcp = create<McpState>()((set, get) => {
     logout: async (id) => {
       apply((await mcpLogout(id)).servers)
     },
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
     lookup: (fn) => {
       for (const server of get().servers) {
         const tool = server.tools.find((entry) => entry.fn === fn)
@@ -96,12 +86,9 @@ export const useMcp = create<McpState>()((set, get) => {
 export function isMcpToolName(name: string): name is McpToolName {
   return name.startsWith('mcp__')
 }
-<<<<<<< HEAD
 
 try {
   new BroadcastChannel('opensol-mcp-oauth').onmessage = () => void useMcp.getState().load()
 } catch {
   // BroadcastChannel is optional; the authorize poll still refreshes the list.
 }
-=======
->>>>>>> 06883a5ac287b170578cf9db1a53d71235123333
