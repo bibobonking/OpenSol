@@ -1,3 +1,4 @@
+import { useSkills } from '../store/skills'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Bug, FlaskConical, FolderSearch, Gamepad2, Globe2, KeyRound, LayoutTemplate, ListChecks, Sparkles } from 'lucide-react'
 import type { Attachment } from '../types'
@@ -86,7 +87,7 @@ export function ChatView() {
   const lastAssistantId = [...messages].reverse().find((message) => message.role === 'assistant')?.id
   const connected = hasCredentials(settings)
   const selectedModel = activeModelId(settings)
-  const activeSkills = settings.skills.filter((skill) => skill.enabled).length
+  const activeSkills = useSkills((state) => state.skills.filter((skill) => skill.enabled).length)
   const turns = groupConversationTurns(messages)
   const context = getContextUsage(messages, activeModel)
   const mood = pixleMood(messages, streaming)

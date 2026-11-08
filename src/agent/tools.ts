@@ -538,6 +538,8 @@ export function toolSummary(name: ToolName, args: Record<string, unknown>): stri
               ? args.action
               : name === 'subagent'
                 ? args.task
+                : name === 'skill'
+                  ? [args.name, args.file].filter(Boolean).join(' / ')
                 : (args.path ?? '')
   return typeof value === 'string' ? value : ''
 }

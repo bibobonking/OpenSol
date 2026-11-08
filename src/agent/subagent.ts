@@ -11,8 +11,6 @@ import { streamModel } from './model'
 import { buildSubagentPrompt } from './prompt'
 import { executeTool } from './tools'
 
-const MAX_SUBAGENT_ROUNDS = 6
-
 function id(prefix: string) {
   const raw =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -33,6 +31,7 @@ export async function runSubagent(
   task: string,
   context: string,
   signal: AbortSignal,
+  sessionId?: string,
 ): Promise<string> {
   const cleanTask = task.trim()
   if (!cleanTask) return 'The subagent was not given a task.'
@@ -40,7 +39,7 @@ export async function runSubagent(
 
   const settings = useSettings.getState()
   const model = findModel(settings.provider, settings.model)
-  const system = buildSubagentPrompt(settings)
+  const system = buildSubagentPrompt(settings, sessionId)
   const now = Date.now()
   const first: UserMessage = {
     id: id('sub'),
@@ -55,9 +54,8 @@ export async function runSubagent(
     createdAt: now,
   }
   const history: Message[] = [first]
-  let lastContent = ''
 
-  for (let round = 0; round < MAX_SUBAGENT_ROUNDS; round += 1) {
+  for (let round = 0; ; round += 1) {
     if (signal.aborted) throw abortError()
     const result = await streamModel({
       settings,
@@ -68,8 +66,6 @@ export async function runSubagent(
       signal,
       handlers: EMPTY_HANDLERS,
     })
-    if (result.content.trim()) lastContent = result.content.trim()
-
     const assistant: AssistantMessage = {
       id: id('submsg'),
       role: 'assistant',
@@ -99,11 +95,4 @@ export async function runSubagent(
       history.push(toolMessage)
     }
   }
-
-  return [
-    lastContent,
-    `The subagent stopped after ${MAX_SUBAGENT_ROUNDS} investigation rounds. Continue with the evidence above or ask a narrower question.`,
-  ]
-    .filter(Boolean)
-    .join('\n\n')
 }

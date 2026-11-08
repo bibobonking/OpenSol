@@ -38,6 +38,8 @@ export interface ModelInfo {
   apiKind: ApiKind
   free?: boolean
   canonicalId?: string
+  /** USD per 1M tokens, when the provider or catalog publishes it. */
+  pricing?: { input: number; output: number }
   note?: string
 }
 
@@ -113,19 +115,18 @@ export interface ToolSetting {
 
 export type SearchProvider = 'duckduckgo' | 'tavily' | 'brave' | 'serper'
 
-export interface Skill {
-  id: string
+/** A skill folder installed on the daemon (SKILL.md + bundled files). */
+export interface InstalledSkill {
   name: string
+  title: string
   description: string
-  instructions: string
   enabled: boolean
-  builtIn?: boolean
-  /** Where the skill came from. Folder skills keep their uploaded files. */
-  source?: 'folder' | 'npm'
-  package?: string
-  version?: string
-  /** Text files from the folder, keyed by relative path (SKILL.md included). */
-  files?: Record<string, string>
+  /** 'upload' | 'folder' | 'legacy' | `npm:<spec>` */
+  source: string
+  installedAt: string
+  fileCount: number
+  size: number
+  path: string
 }
 
 export interface AppSettings {
@@ -136,12 +137,11 @@ export interface AppSettings {
   temperature: number
   maxTokens: number
   systemPrompt: string
-  /** Per-workspace system prompt overrides, keyed by workspace root. */
+  /** Custom base prompts per workspace folder (absolute root path). Missing = use the shared prompt. */
   workspacePrompts: Record<string, string>
   providers: Record<string, ProviderCredentials>
   searchProvider: SearchProvider
   tools: Record<BuiltinToolName, ToolSetting>
-  skills: Skill[]
   theme: ThemeId
   showTokenEstimate: boolean
   mode: AgentMode
@@ -195,6 +195,8 @@ export interface AssistantMessage {
   model?: string
   provider?: ProviderId
   usage?: { input?: number; output?: number; cost?: number }
+  /** Credits spent on this reply (provider-reported, else tokens × model price). */
+  cost?: number
   error?: string
   stopped?: boolean
   durationMs?: number
@@ -236,10 +238,10 @@ export interface ChatSession {
   mode?: AgentMode
   /** Workspace folder the session was started in. */
   workspace?: string
-  /** Per-session system prompt. Empty means the workspace or shared prompt is used. */
-  systemPrompt?: string
   /** Who last set the title; only 'auto' titles may be replaced by the AI. */
   titleSource?: 'auto' | 'ai' | 'user'
+  /** Custom base prompt for this session only. Undefined = inherit (workspace prompt, else the shared one). */
+  systemPrompt?: string
 }
 
 export type McpStatus = 'disabled' | 'disconnected' | 'connecting' | 'connected' | 'needs_auth' | 'error'
@@ -286,7 +288,7 @@ export interface McpServer {
 export interface Usage {
   input?: number
   output?: number
-  /** Cost/credits reported by the provider, when it reports one. */
+  /** Credits/USD the provider itself reported for this request. */
   cost?: number
 }
 
@@ -379,6 +381,18 @@ export interface DeployRequest {
   mode?: AgentMode
 }
 
+export interface DeployDetection {
+  path: string
+  name: string
+  framework: string
+  packageManager: string
+  hasNodeModules: boolean
+  buildCommand: string
+  outputDir: string
+  expectedOutputDir: string
+  built: boolean
+}
+
 export interface DeployResult {
   provider: DeployProviderId
   url: string
@@ -388,6 +402,7 @@ export interface DeployResult {
 
 export type DeployEvent =
   | { type: 'start'; provider: DeployProviderId; path?: string }
+  | { type: 'step'; id: string; label: string }
   | { type: 'log'; stream: 'stdout' | 'stderr' | 'meta'; text: string }
   | { type: 'done'; result: DeployResult }
   | { type: 'error'; message: string; code?: string }

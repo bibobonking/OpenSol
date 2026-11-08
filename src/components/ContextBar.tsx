@@ -10,6 +10,7 @@ import { useMemo } from 'react'
 import type { ModelInfo, Message } from '../types'
 import { getContextUsage, AUTO_COMPACT_THRESHOLD } from '../lib/context'
 import { isCompacting } from '../agent/compact'
+import { formatCredits, sumCost } from '../lib/credits'
 import { cn } from '../lib/utils'
 
 interface ContextBarProps {
@@ -26,6 +27,7 @@ function formatTokens(n: number): string {
 
 export function ContextBar({ messages, model, sessionId }: ContextBarProps) {
   const usage = useMemo(() => getContextUsage(messages, model), [messages, model])
+  const spent = useMemo(() => sumCost(messages), [messages])
   const compacting = sessionId ? isCompacting(sessionId) : false
 
   if (messages.length === 0) return null
@@ -51,6 +53,14 @@ export function ContextBar({ messages, model, sessionId }: ContextBarProps) {
           <span className="text-faint">/ {formatTokens(limit)} tokens</span>
           <span className="text-faint">·</span>
           <span>{pct}%</span>
+          {spent > 0 && (
+            <>
+              <span className="text-faint">·</span>
+              <span className="text-ink/80" title="Credits spent in this session (provider-reported, or tokens × model price)">
+                {formatCredits(spent)}
+              </span>
+            </>
+          )}
         </>
       )}
     </div>

@@ -4,16 +4,14 @@ import { activeModelId, useSettings } from '../../store/settings'
 import { createId } from '../../store/chats'
 import { findModel } from '../../store/models'
 import { useRuntime } from '../../store/ui'
-import { useWorkspace } from '../../store/workspace'
 import { getProviderName } from '../../data/providers'
 import { describeRequestError } from '../../lib/sse'
-import { MAX_PROVIDER_RETRIES, isRetryableProviderError, retryDelayMs } from '../../lib/retry'
+import { messageCost } from '../../lib/credits'
+import { MAX_RETRIES, backoffMs, classifyProviderError } from '../../lib/retry'
 import type { AdapterResult } from '../../agent/adapters/shared'
 import { createTurnQueue, lastUserMessageId } from '../../agent/queue'
 import { resolveToolSetting } from '../mcp-tools'
 import type { StepContext, StepResult, TurnResult } from '../types'
-
-const MAX_RETRIES = MAX_PROVIDER_RETRIES
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -111,7 +109,7 @@ export class AgentLoopService extends Service {
     let turnError: string | undefined
 
     try {
-      // No round cap: the turn ends when the model stops calling tools or the user stops it.
+      // No round cap: the turn ends when the model stops calling tools, errors, or the user stops it.
       rounds: for (let round = 0; ; round += 1) {
         totalRounds = round + 1
         if (controller.signal.aborted) break
@@ -188,12 +186,7 @@ export class AgentLoopService extends Service {
               settings,
               model: findModel(settings.provider, activeModelId(settings)),
               history,
-              system: this.ctx.systemPrompt.assemble(settings, mode, {
-                sessionPrompt: current.systemPrompt,
-                workspacePrompt: current.workspace
-                  ? settings.workspacePrompts[current.workspace]
-                  : settings.workspacePrompts[useWorkspace.getState().root ?? ''],
-              }),
+              system: this.ctx.systemPrompt.assemble(settings, mode, sessionId),
               mode,
               signal: controller.signal,
               handlers: {
@@ -215,39 +208,26 @@ export class AgentLoopService extends Service {
           } catch (error) {
             const stopped = isAbortError(error) || controller.signal.aborted
             // Only retry when nothing reached the screen yet, so a retry never duplicates text.
+            const message = error instanceof Error ? error.message : ''
+            const decision = classifyProviderError(message)
             const retryable =
-              !stopped &&
-              attempt < MAX_RETRIES &&
-              !streamedContent &&
-              !streamedReasoning &&
-              isRetryableProviderError(error instanceof Error ? error.message : '')
+              !stopped && decision.retry && attempt < MAX_RETRIES && !streamedContent && !streamedReasoning
             if (retryable) {
               attempt += 1
-              const reason = (error instanceof Error ? error.message : 'provider error').replace(/\s+/g, ' ').slice(0, 240)
+              const wait = backoffMs(attempt, message)
               window.dispatchEvent(
                 new CustomEvent('maxcode:notice', {
                   detail: {
-                    message: `${providerName}: ${reason} — retrying ${attempt}/${MAX_RETRIES}…`,
+                    message: `${providerName} had a temporary error. Retrying in ${Math.round(wait / 1000)}s (${attempt}/${MAX_RETRIES})…`,
                     tone: 'info',
                   },
                 }),
               )
-              await sleep(retryDelayMs(attempt), controller.signal)
-              if (controller.signal.aborted) continue
+              await sleep(wait, controller.signal)
               continue
             }
             if (flushTimer !== undefined) window.clearTimeout(flushTimer)
             turnError = stopped ? undefined : describeRequestError(error, providerName)
-            if (turnError) {
-              window.dispatchEvent(
-                new CustomEvent('maxcode:notice', {
-                  detail: {
-                    message: `${providerName} failed after ${attempt + 1} attempt${attempt === 0 ? '' : 's'}: ${turnError}`,
-                    tone: 'error',
-                  },
-                }),
-              )
-            }
             this.ctx.sessions.updateMessage(sessionId, assistantId, {
               content: streamedContent,
               reasoning: streamedReasoning,
@@ -266,7 +246,11 @@ export class AgentLoopService extends Service {
           reasoning: result.reasoning,
           thinkingBlocks: result.thinkingBlocks,
           toolCalls: result.toolCalls,
-          usage: usage.input || usage.output || usage.cost ? usage : result.usage,
+          usage: usage.input || usage.output ? usage : result.usage,
+          cost: messageCost(
+            usage.input || usage.output ? usage : result.usage,
+            findModel(settings.provider, activeModelId(settings)),
+          ),
           durationMs: Date.now() - startedAt,
           stopped: controller.signal.aborted || undefined,
         })
@@ -331,6 +315,7 @@ export class AgentLoopService extends Service {
                         typeof call.args.task === 'string' ? call.args.task : '',
                         typeof call.args.context === 'string' ? call.args.context : '',
                         controller.signal,
+                        sessionId,
                       ),
                     ),
                     isError: false,

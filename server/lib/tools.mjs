@@ -5,7 +5,6 @@ import {
   chmod,
   lstat,
   mkdir,
-  mkdtemp,
   readdir,
   readFile,
   realpath,
@@ -15,7 +14,6 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { isIP } from 'node:net'
-import os from 'node:os'
 import path from 'node:path'
 import { HttpError } from './http.mjs'
 import { loadState, loadSecretsSafe } from './store.mjs'
@@ -973,39 +971,6 @@ export async function checkpointSummary(id) {
   return checkpoint ? describeCheckpoint(checkpoint) : null
 }
 
-/**
- * Skills are uploaded as text files. Materialise them in a throwaway folder,
- * run one command there, and delete the folder so nothing leaks between calls.
- */
-async function runSkillScript({ files, command }) {
-  if (!files || typeof files !== 'object') throw new HttpError(400, 'The skill has no files.', 'bad_skill')
-  const entries = Object.entries(files).filter(
-    (entry) => typeof entry[1] === 'string' && typeof entry[0] === 'string' && entry[0].trim(),
-  )
-  if (entries.length === 0) throw new HttpError(400, 'The skill has no files.', 'bad_skill')
-  if (entries.length > 200) throw new HttpError(400, 'A skill may ship at most 200 files.', 'skill_too_large')
-  const root = await mkdtemp(path.join(os.tmpdir(), 'opensol-skill-'))
-  try {
-    for (const [relative, content] of entries) {
-      const clean = relative.replace(/\\/g, '/').replace(/^\/+/, '')
-      const absolute = path.resolve(root, clean)
-      if (!absolute.startsWith(`${root}${path.sep}`)) {
-        throw new HttpError(400, `Unsafe path in skill files: ${relative}`, 'bad_skill')
-      }
-      await mkdir(path.dirname(absolute), { recursive: true })
-      await writeFile(absolute, content.slice(0, 512 * 1024))
-    }
-    const result = await runProcess('/bin/bash', ['-lc', String(command ?? '')], {
-      cwd: root,
-      timeoutMs: 120_000,
-      env: { OPENSOL_SKILL_ROOT: root },
-    })
-    return result
-  } finally {
-    await rm(root, { recursive: true, force: true }).catch(() => undefined)
-  }
-}
-
 export async function executeTool(name, args = {}, { mode = 'build', checkpoint = '' } = {}) {
   const input = args && typeof args === 'object' ? args : {}
   // The prompt promises the daemon enforces plan mode, so enforce it here and not only in the UI.
@@ -1015,9 +980,6 @@ export async function executeTool(name, args = {}, { mode = 'build', checkpoint 
       'Plan mode is read-only. Use read_file, list_files, grep or a read-only shell command.',
       'plan_readonly',
     )
-  }
-  if (mode === 'plan' && name === 'skill_run') {
-    throw new HttpError(403, 'Plan mode is read-only. Skill scripts may change the machine.', 'plan_readonly')
   }
   if (checkpoint && FILE_MUTATIONS.has(name)) {
     try {
@@ -1055,8 +1017,6 @@ export async function executeTool(name, args = {}, { mode = 'build', checkpoint 
       return readUrl(String(input.url ?? ''))
     case 'git':
       return runGit(String(input.action ?? 'status'), input, { mode })
-    case 'skill_run':
-      return runSkillScript({ files: input.files, command: input.command })
     default:
       throw new HttpError(400, `Unknown tool: ${name}`, 'unknown_tool')
   }

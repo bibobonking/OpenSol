@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { readFile, readdir, realpath, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { HttpError } from './http.mjs'
@@ -13,7 +13,7 @@ const CLIS = {
   cloudflare: { bin: 'wrangler', pkg: 'wrangler@latest', label: 'Wrangler' },
 }
 
-function slugify(value, fallback = 'opensol-site') {
+function slugify(value, fallback = 'maxcode-site') {
   const slug = String(value ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
@@ -26,7 +26,14 @@ function suffix() {
   return Math.random().toString(36).slice(2, 7)
 }
 
+const IS_WINDOWS = process.platform === 'win32'
+
 async function commandExists(bin) {
+  // Direct spawn first: it is fast and works on Windows (.cmd shims). Fall back to a login shell
+  // so tools installed through nvm/asdf/Homebrew profiles are still found.
+  const direct = await runCapture(bin, ['--version'], { timeoutMs: 15_000, shell: IS_WINDOWS })
+  if (direct.code === 0) return { installed: true, version: direct.stdout.split('\n')[0]?.trim() ?? '' }
+  if (IS_WINDOWS) return { installed: false, version: '' }
   const result = await runCapture('bash', ['-lc', `command -v ${bin} >/dev/null 2>&1 && ${bin} --version`], {
     timeoutMs: 20_000,
   })
@@ -43,15 +50,16 @@ export async function deployToolStatus() {
   return Object.fromEntries(entries)
 }
 
-function runCapture(command, args, { cwd, env, timeoutMs = 120_000 } = {}) {
+function runCapture(command, args, { cwd, env, timeoutMs = 120_000, shell = false } = {}) {
   return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
     const child = spawn(command, args, {
       cwd,
-      env: { ...process.env, ...(env ?? {}) },
+      env: cleanEnv({ ...process.env, ...(env ?? {}) }),
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
+      shell,
     })
     const timer = setTimeout(() => {
       try {
@@ -78,17 +86,33 @@ function runCapture(command, args, { cwd, env, timeoutMs = 120_000 } = {}) {
   })
 }
 
+/** spawn() rejects undefined env values on some Node versions; drop them. */
+function cleanEnv(env) {
+  return Object.fromEntries(Object.entries(env).filter(([, value]) => typeof value === 'string'))
+}
+
+function winQuote(arg) {
+  return /[\s"&|<>^()]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg
+}
+
 function runStreaming(command, args, { cwd, env, onLog, timeoutMs = 15 * 60 * 1000, signal }) {
   return new Promise((resolve, reject) => {
     let stdout = ''
     let stderr = ''
     let settled = false
-    const child = spawn(command, args, {
-      cwd,
-      env: { ...process.env, ...(env ?? {}), CI: '1' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: process.platform !== 'win32',
-    })
+    const child = IS_WINDOWS
+      ? spawn([command, ...args].map(winQuote).join(' '), {
+          cwd,
+          env: cleanEnv({ ...process.env, ...(env ?? {}), CI: '1' }),
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: true,
+        })
+      : spawn(command, args, {
+          cwd,
+          env: cleanEnv({ ...process.env, ...(env ?? {}), CI: '1' }),
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: true,
+        })
     const finish = (result) => {
       if (settled) return
       settled = true
@@ -169,68 +193,18 @@ async function fetchJson(url, options = {}) {
   return payload
 }
 
-function firstUrl(text) {
-  const matches = text.match(/https:\/\/[^\s"'<>)\]]+/g) ?? []
-  const filtered = matches.filter(
-    (url) =>
-      !/vercel\.com\/(docs|cli|pricing)/i.test(url) &&
-      !/netlify\.com\/(docs|pricing|app)/i.test(url) &&
-      !/developers\.cloudflare\.com/i.test(url) &&
-      !/wrangler/i.test(url) &&
-      !/github\.com/i.test(url),
-  )
-  return filtered[filtered.length - 1] ?? ''
+const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g
+
+function urlsIn(text) {
+  return (String(text).replace(ANSI, '').match(/https:\/\/[^\s"'<>)\]]+/g) ?? []).map((url) => url.replace(/[.,;]+$/, ''))
 }
 
-const OUTPUT_CANDIDATES = ['dist', 'build', 'out', '.output/public', 'public']
-const FRAMEWORKS = [
-  { dep: 'next', name: 'Next.js', output: 'out' },
-  { dep: 'nuxt', name: 'Nuxt', output: '.output/public' },
-  { dep: 'astro', name: 'Astro', output: 'dist' },
-  { dep: '@sveltejs/kit', name: 'SvelteKit', output: 'build' },
-  { dep: 'vite', name: 'Vite', output: 'dist' },
-  { dep: 'react-scripts', name: 'Create React App', output: 'build' },
-]
-
-async function packageManager(root) {
-  for (const [file, command] of [
-    ['pnpm-lock.yaml', 'pnpm'],
-    ['yarn.lock', 'yarn'],
-    ['bun.lockb', 'bun'],
-    ['bun.lock', 'bun'],
-    ['package-lock.json', 'npm'],
-  ]) {
-    if (await stat(path.join(root, file)).catch(() => null)) return command
-  }
-  return 'npm'
-}
-
-/** Read package.json and existing build output so the panel can fill the form correctly. */
-export async function inspectDeployProject(rawPath) {
-  const absolute = await resolveDeployPath(rawPath)
-  await ensureDir(absolute)
-  const pkg = await readFile(path.join(absolute, 'package.json'), 'utf8')
-    .then((text) => JSON.parse(text))
-    .catch(() => null)
-  const deps = { ...(pkg?.dependencies ?? {}), ...(pkg?.devDependencies ?? {}) }
-  const framework = FRAMEWORKS.find((entry) => deps[entry.dep])
-  const found = []
-  for (const candidate of OUTPUT_CANDIDATES) {
-    const info = await stat(path.join(absolute, candidate)).catch(() => null)
-    if (info?.isDirectory()) found.push(candidate)
-  }
-  const manager = await packageManager(absolute)
-  const script = typeof pkg?.scripts?.build === 'string' ? pkg.scripts.build : ''
-  const buildCommand = script ? (manager === 'npm' ? 'npm run build' : `${manager} build`) : ''
-  return {
-    path: absolute,
-    name: slugify(path.basename(absolute), ''),
-    hasPackageJson: Boolean(pkg),
-    framework: framework?.name ?? (pkg ? 'Node project' : 'Static folder'),
-    buildCommand,
-    outputDir: found[0] ?? framework?.output ?? '',
-    existingOutputs: found,
-  }
+/** Picks the live site URL from CLI output, ignoring dashboards, docs and build-log links. */
+function liveUrl(text, preferred, ignored = /(app\.netlify\.com|vercel\.com|dash\.cloudflare\.com|developers\.cloudflare\.com|docs\.|github\.com|npmjs\.)/i) {
+  const urls = urlsIn(text).filter((url) => !ignored.test(url))
+  const preferredMatches = urls.filter((url) => preferred.test(url))
+  const pool = preferredMatches.length > 0 ? preferredMatches : urls
+  return pool[pool.length - 1] ?? ''
 }
 
 async function resolveCli(provider) {
@@ -251,31 +225,96 @@ async function resolveCli(provider) {
   return { command: 'npx', prefix: ['--yes', def.pkg], label: def.label }
 }
 
-async function buildIfNeeded(cwd, buildCommand, onLog, signal) {
-  const command = typeof buildCommand === 'string' ? buildCommand.trim() : ''
-  if (!command) return
-  onLog({ stream: 'meta', text: `Running build: ${command}` })
-  const result = await runStreaming('/bin/bash', ['-lc', command], {
-    cwd,
-    onLog,
-    signal,
-    env: { MAXCODE_DEPLOY: '1' },
-  })
-  if (result.code !== 0) {
-    throw new HttpError(500, `Build failed with exit code ${result.code}.`, 'build_failed')
+async function pathInfo(target) {
+  return stat(target).catch(() => null)
+}
+
+async function readPackageJson(cwd) {
+  try {
+    const parsed = JSON.parse(await readFile(path.join(cwd, 'package.json'), 'utf8'))
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
   }
 }
 
-async function outputDirFor(cwd, outputDir) {
-  const clean = typeof outputDir === 'string' ? outputDir.trim() : ''
-  if (!clean || clean === 'auto') {
-    // With no explicit choice, use a real build folder if one exists instead of dumping the whole project.
-    for (const candidate of OUTPUT_CANDIDATES) {
-      const found = await stat(path.join(cwd, candidate)).catch(() => null)
-      if (found?.isDirectory()) return path.join(cwd, candidate)
-    }
-    return cwd
+async function packageManager(cwd) {
+  if (await pathInfo(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm'
+  if (await pathInfo(path.join(cwd, 'yarn.lock'))) return 'yarn'
+  if ((await pathInfo(path.join(cwd, 'bun.lockb'))) || (await pathInfo(path.join(cwd, 'bun.lock')))) return 'bun'
+  return 'npm'
+}
+
+const OUTPUT_CANDIDATES = ['dist', 'build', 'out', '.output/public', 'public']
+
+async function folderHasFiles(dir) {
+  try {
+    const entries = await readdir(dir)
+    return entries.length > 0
+  } catch {
+    return false
   }
+}
+
+/** Looks at a project folder and suggests how it should be built and which folder to publish. */
+export async function detectProject(raw) {
+  const cwd = await resolveDeployPath(raw)
+  await ensureDir(cwd)
+  const pkg = await readPackageJson(cwd)
+  const deps = { ...(pkg?.dependencies ?? {}), ...(pkg?.devDependencies ?? {}) }
+  const framework =
+    deps.next ? 'Next.js'
+    : deps.nuxt ? 'Nuxt'
+    : deps['@sveltejs/kit'] ? 'SvelteKit'
+    : deps.astro ? 'Astro'
+    : deps.vite ? 'Vite'
+    : deps['react-scripts'] ? 'Create React App'
+    : deps['@angular/core'] ? 'Angular'
+    : deps.vue ? 'Vue'
+    : pkg ? 'Node project'
+    : ''
+  const manager = await packageManager(cwd)
+  const hasBuild = typeof pkg?.scripts?.build === 'string'
+  const buildCommand = hasBuild ? (manager === 'npm' ? 'npm run build' : `${manager} build`) : ''
+
+  let outputDir = ''
+  for (const candidate of OUTPUT_CANDIDATES) {
+    const dir = path.join(cwd, ...candidate.split('/'))
+    if ((await pathInfo(dir))?.isDirectory() && (await folderHasFiles(dir))) {
+      // `public` is only a real output for projects without a build step; otherwise it is source assets.
+      if (candidate === 'public' && hasBuild) continue
+      outputDir = candidate
+      break
+    }
+  }
+  const staticSite = !hasBuild && Boolean(await pathInfo(path.join(cwd, 'index.html')))
+  if (!outputDir && staticSite) outputDir = '.'
+  const expected = hasBuild ? (deps['react-scripts'] ? 'build' : deps.nuxt ? '.output/public' : deps.next ? 'out' : 'dist') : ''
+  return {
+    path: cwd,
+    name: slugify(pkg?.name ? String(pkg.name).replace(/^@[^/]+\//, '') : path.basename(cwd), ''),
+    framework: framework || (staticSite ? 'Static site' : ''),
+    packageManager: pkg ? manager : '',
+    hasNodeModules: Boolean(await pathInfo(path.join(cwd, 'node_modules'))),
+    buildCommand,
+    outputDir,
+    expectedOutputDir: outputDir || expected,
+    built: Boolean(outputDir),
+  }
+}
+
+async function runBuild(cwd, command, onLog, signal) {
+  const result = IS_WINDOWS
+    ? await runStreaming(command, [], { cwd, onLog, signal, env: { MAXCODE_DEPLOY: '1' } })
+    : await runStreaming('/bin/bash', ['-lc', command], { cwd, onLog, signal, env: { MAXCODE_DEPLOY: '1' } })
+  if (result.code !== 0) {
+    throw new HttpError(500, `"${command}" failed with exit code ${result.code}. Fix the error in the log, then deploy again.`, 'build_failed')
+  }
+}
+
+function outputDirFor(cwd, outputDir) {
+  const clean = typeof outputDir === 'string' ? outputDir.trim() : ''
+  if (!clean) return cwd
   const resolved = path.resolve(cwd, clean)
   if (!resolved.startsWith(cwd.endsWith(path.sep) ? cwd : `${cwd}${path.sep}`) && resolved !== cwd) {
     throw new HttpError(400, 'The output folder must stay inside the deploy folder.', 'bad_output')
@@ -285,13 +324,7 @@ async function outputDirFor(cwd, outputDir) {
 
 async function ensureDir(target) {
   const info = await stat(target).catch(() => null)
-  if (!info?.isDirectory()) {
-    throw new HttpError(
-      400,
-      `The folder "${path.basename(target)}" does not exist. Run a build command or choose the folder that actually contains the site.`,
-      'bad_deploy_path',
-    )
-  }
+  if (!info?.isDirectory()) throw new HttpError(400, 'The folder to deploy does not exist.', 'bad_deploy_path')
 }
 
 /**
@@ -319,8 +352,20 @@ async function netlifyDeploy({ cwd, targetDir, projectName, siteId, onLog, signa
   if (!token) {
     throw new HttpError(400, 'Add a Netlify personal access token in Settings → Deploy.', 'missing_deploy_token')
   }
-  let site = typeof siteId === 'string' ? siteId.trim() : secrets.siteId ?? ''
+  // An explicit site id wins; otherwise reuse the site from the last deploy instead of creating a new one every time.
+  const requested = typeof siteId === 'string' ? siteId.trim() : ''
+  let site = requested || (typeof secrets.siteId === 'string' ? secrets.siteId : '')
   let siteUrl = ''
+  if (site && !requested) {
+    const existing = await fetchJson(`https://api.netlify.com/api/v1/sites/${encodeURIComponent(site)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => null)
+    if (existing) siteUrl = String(existing.ssl_url ?? existing.url ?? '')
+    else {
+      onLog({ stream: 'meta', text: 'The site from the last deploy no longer exists. Creating a new one.' })
+      site = ''
+    }
+  }
   if (!site) {
     const name = slugify(projectName || path.basename(cwd), `maxcode-${suffix()}`)
     onLog({ stream: 'meta', text: `Creating Netlify site "${name}"…` })
@@ -348,11 +393,6 @@ async function netlifyDeploy({ cwd, targetDir, projectName, siteId, onLog, signa
     siteUrl = String(created.ssl_url ?? created.url ?? '')
     if (!site) throw new HttpError(502, 'Netlify did not return a site id.', 'deploy_api_failed')
     onLog({ stream: 'meta', text: `Created site ${siteUrl || site}` })
-  } else {
-    const info = await fetchJson(`https://api.netlify.com/api/v1/sites/${encodeURIComponent(site)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => null)
-    if (info) siteUrl = String(info.ssl_url ?? info.url ?? '')
   }
 
   await setDeploySecret('netlify', { siteId: site })
@@ -364,6 +404,7 @@ async function netlifyDeploy({ cwd, targetDir, projectName, siteId, onLog, signa
     [
       ...cli.prefix,
       'deploy',
+      '--no-build',
       '--prod',
       '--dir',
       targetDir,
@@ -377,7 +418,7 @@ async function netlifyDeploy({ cwd, targetDir, projectName, siteId, onLog, signa
   if (result.code !== 0) {
     throw new HttpError(500, `Netlify deploy failed (exit ${result.code}).`, 'deploy_failed')
   }
-  const url = firstUrl(result.stdout) || siteUrl
+  const url = liveUrl(result.stdout, /\.netlify\.app/i) || siteUrl
   if (url) await setDeploySecret('netlify', { lastUrl: url })
   return { provider: 'netlify', url, siteId: site }
 }
@@ -390,21 +431,24 @@ async function vercelDeploy({ cwd, targetDir, projectName, onLog, signal }) {
   }
   const cli = await resolveCli('vercel')
   const teamId = (typeof secrets.teamId === 'string' && secrets.teamId) || ''
-  const args = [...cli.prefix, 'deploy', targetDir, '--prod', '--yes']
-  if (teamId) args.push('--scope', teamId)
   const name = slugify(projectName || path.basename(cwd), '')
-  if (name) args.push('--name', name)
-  onLog({ stream: 'meta', text: `Deploying ${targetDir} with ${cli.label}${name ? ` as "${name}"` : ''}…` })
-  const result = await runStreaming(cli.command, args, {
-    cwd,
-    onLog,
-    signal,
-    env: { VERCEL_TOKEN: token, VERCEL_ORG_ID: teamId || undefined },
-  })
-  if (result.code !== 0) {
-    throw new HttpError(500, `Vercel deploy failed (exit ${result.code}).`, 'deploy_failed')
+  const base = [...cli.prefix, 'deploy', targetDir, '--prod', '--yes', '--token', token]
+  if (teamId) base.push('--scope', teamId)
+  const run = (args) => {
+    onLog({ stream: 'meta', text: `Deploying ${targetDir} with ${cli.label}${name ? ` as "${name}"` : ''}…` })
+    // The token goes through the environment too; never log the argument list.
+    return runStreaming(cli.command, args, { cwd, onLog, signal, env: { VERCEL_TOKEN: token } })
   }
-  const url = firstUrl(`${result.stdout}\n${result.stderr}`)
+  // VERCEL_ORG_ID must not be set alone (the CLI then demands VERCEL_PROJECT_ID), so the team goes through --scope.
+  let result = await run(name ? [...base, '--name', name] : base)
+  if (result.code !== 0 && name && /(unknown|unexpected|unrecognized).{0,40}--?name|--name.{0,40}(unknown|not)/i.test(`${result.stderr}\n${result.stdout}`)) {
+    onLog({ stream: 'meta', text: 'This Vercel CLI no longer accepts --name; retrying without it.' })
+    result = await run(base)
+  }
+  if (result.code !== 0) {
+    throw new HttpError(500, `Vercel deploy failed (exit ${result.code}). See the log above.`, 'deploy_failed')
+  }
+  const url = liveUrl(`${result.stdout}\n${result.stderr}`, /\.vercel\.app/i)
   if (!url) throw new HttpError(502, 'Vercel did not report a deployment URL.', 'deploy_url_missing')
   await setDeploySecret('vercel', { projectName: name || projectName || '', lastUrl: url })
   return { provider: 'vercel', url, project: name || projectName || '' }
@@ -477,26 +521,83 @@ async function cloudflareDeploy({ cwd, targetDir, projectName, onLog, signal }) 
   if (result.code !== 0) {
     throw new HttpError(500, `Cloudflare Pages deploy failed (exit ${result.code}).`, 'deploy_failed')
   }
-  const url = firstUrl(`${result.stdout}\n${result.stderr}`) || `https://${name}.pages.dev`
+  const url = `https://${name}.pages.dev`
+  const reported = liveUrl(`${result.stdout}\n${result.stderr}`, /\.pages\.dev/i)
+  onLog({ stream: 'meta', text: reported && reported !== url ? `This deployment: ${reported}` : `Production alias: ${url}` })
   await setDeploySecret('cloudflare', { lastUrl: url })
   return { provider: 'cloudflare', url, project: name }
 }
 
-export async function runDeploy(input, { onLog = () => undefined, signal } = {}) {
+export async function runDeploy(input, { onLog = () => undefined, onStep = () => undefined, signal } = {}) {
   const provider = String(input?.provider ?? '')
   if (!['cloudflare', 'netlify', 'vercel'].includes(provider)) {
     throw new HttpError(400, 'Choose Cloudflare Pages, Netlify or Vercel.', 'bad_deploy_provider')
   }
+  onStep({ id: 'prepare', label: 'Inspect project' })
   const absolute = await resolveDeployPath(input?.path)
   await ensureDir(absolute)
-  const targetDir = await outputDirFor(absolute, input?.outputDir)
-  await buildIfNeeded(absolute, input?.buildCommand, onLog, signal)
-  await ensureDir(targetDir)
+  const detected = await detectProject(absolute)
 
+  const requestedOutput = typeof input?.outputDir === 'string' ? input.outputDir.trim() : ''
+  const auto = !requestedOutput || requestedOutput === 'auto'
+  let buildCommand = typeof input?.buildCommand === 'string' ? input.buildCommand.trim() : ''
+  let outputDir = auto ? detected.outputDir : requestedOutput
+
+  const outputMissing = async () => {
+    const dir = auto ? detected.outputDir : requestedOutput
+    if (!dir) return true
+    const info = await pathInfo(path.resolve(absolute, dir))
+    return !info?.isDirectory()
+  }
+  if (!buildCommand && (await outputMissing()) && detected.buildCommand) {
+    buildCommand = detected.buildCommand
+    onLog({ stream: 'meta', text: `No output folder yet. Building first with "${buildCommand}".` })
+  }
+
+  if (buildCommand) {
+    const needsInstall = detected.packageManager && !detected.hasNodeModules && /\b(npm|pnpm|yarn|bun)\b/.test(buildCommand)
+    if (needsInstall) {
+      onStep({ id: 'install', label: 'Install dependencies' })
+      const install = detected.packageManager === 'npm' ? 'npm install' : `${detected.packageManager} install`
+      onLog({ stream: 'meta', text: `node_modules is missing. Running ${install}.` })
+      await runBuild(absolute, install, onLog, signal)
+    }
+    onStep({ id: 'build', label: 'Build' })
+    onLog({ stream: 'meta', text: `Running build: ${buildCommand}` })
+    await runBuild(absolute, buildCommand, onLog, signal)
+  }
+
+  if (auto) {
+    outputDir = (await detectProject(absolute)).outputDir
+    if (!outputDir) {
+      throw new HttpError(
+        400,
+        `No output folder found in ${path.basename(absolute)}. Add a build command that creates dist/, build/ or out/, or choose the folder to publish.`,
+        'bad_output',
+      )
+    }
+  }
+  const targetDir = outputDirFor(absolute, outputDir)
+  const info = await pathInfo(targetDir)
+  if (!info?.isDirectory()) {
+    throw new HttpError(
+      400,
+      `The output folder "${outputDir}" does not exist${buildCommand ? ' after the build' : '. Add a build command or pick another folder'}.`,
+      'bad_output',
+    )
+  }
+  if (!(await folderHasFiles(targetDir))) {
+    throw new HttpError(400, `The output folder "${outputDir}" is empty, so there is nothing to publish.`, 'bad_output')
+  }
+  if (!(await pathInfo(path.join(targetDir, 'index.html')))) {
+    onLog({ stream: 'meta', text: `Note: ${outputDir} has no index.html, so the site root may show a 404.` })
+  }
+
+  onStep({ id: 'publish', label: 'Publish' })
   const common = {
     cwd: absolute,
     targetDir,
-    projectName: String(input?.projectName ?? ''),
+    projectName: String(input?.projectName ?? '').trim() || detected.name,
     siteId: String(input?.siteId ?? ''),
     onLog,
     signal,

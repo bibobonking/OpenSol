@@ -69,8 +69,7 @@ import {
   workspaceRoot,
   writeWorkspaceFile,
 } from './lib/tools.mjs'
-import { deployToolStatus, inspectDeployProject, runDeploy } from './lib/deploy.mjs'
-import { installSkillFromNpm } from './lib/skills.mjs'
+import { deployToolStatus, detectProject, runDeploy } from './lib/deploy.mjs'
 import {
   getPluginArchive,
   installPlugin,
@@ -81,6 +80,14 @@ import {
   setPluginSafe,
   uninstallPlugin,
 } from './lib/plugins.mjs'
+import {
+  installSkillFromNpm,
+  installSkillUpload,
+  listSkills,
+  readSkill,
+  removeSkill,
+  setSkillEnabled,
+} from './lib/skills.mjs'
 import { mcp, sanitizeServerConfig } from './lib/mcp.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -203,7 +210,6 @@ const TOOL_NAMES = new Set([
   'git',
   'subagent',
   'skill',
-  'skill_run',
 ])
 const SEARCH_PROVIDERS = new Set(['duckduckgo', 'tavily', 'brave', 'serper'])
 
@@ -223,16 +229,6 @@ function sanitizeSettings(patch, current = {}) {
     next.maxTokens = Math.max(256, Math.min(200_000, Math.round(source.maxTokens)))
   }
   if (typeof source.systemPrompt === 'string') next.systemPrompt = source.systemPrompt.slice(0, 60_000)
-  if (source.workspacePrompts && typeof source.workspacePrompts === 'object') {
-    const prompts = { ...(current.workspacePrompts ?? {}) }
-    for (const [root, value] of Object.entries(source.workspacePrompts)) {
-      if (!root.startsWith('/') || root.length > 4096) continue
-      if (typeof value !== 'string') continue
-      if (value.trim()) prompts[root] = value.slice(0, 60_000)
-      else delete prompts[root]
-    }
-    next.workspacePrompts = prompts
-  }
   if (typeof source.searchProvider === 'string' && SEARCH_PROVIDERS.has(source.searchProvider)) {
     next.searchProvider = source.searchProvider
   }
@@ -240,6 +236,14 @@ function sanitizeSettings(patch, current = {}) {
   if (typeof source.theme === 'string' && /^[a-z0-9-]{1,64}$/.test(source.theme)) next.theme = source.theme
   if (source.mode === 'build' || source.mode === 'plan') next.mode = source.mode
   if (typeof source.aiSessionTitles === 'boolean') next.aiSessionTitles = source.aiSessionTitles
+  if (source.workspacePrompts && typeof source.workspacePrompts === 'object' && !Array.isArray(source.workspacePrompts)) {
+    const prompts = {}
+    for (const [root, prompt] of Object.entries(source.workspacePrompts).slice(0, 300)) {
+      if (typeof prompt !== 'string' || !root || root.length > 600) continue
+      prompts[root] = prompt.slice(0, 20_000)
+    }
+    next.workspacePrompts = prompts
+  }
   if (typeof source.autoCollapseWork === 'boolean') next.autoCollapseWork = source.autoCollapseWork
   if (source.workDetail === 'concise' || source.workDetail === 'detailed') next.workDetail = source.workDetail
   if (typeof source.chatFontSize === 'number' && Number.isFinite(source.chatFontSize)) {
@@ -270,30 +274,8 @@ function sanitizeSettings(patch, current = {}) {
     next.tools = tools
   }
 
-  if (Array.isArray(source.skills)) {
-    next.skills = source.skills.slice(0, 60).map((skill) => {
-      const item = skill && typeof skill === 'object' ? skill : {}
-      const files = {}
-      if (item.files && typeof item.files === 'object') {
-        for (const [path, content] of Object.entries(item.files).slice(0, 200)) {
-          if (typeof path === 'string' && typeof content === 'string' && path.length <= 300) {
-            files[path] = content.slice(0, 512 * 1024)
-          }
-        }
-      }
-      return {
-        id: typeof item.id === 'string' ? item.id.slice(0, 120) : `skill-${randomBytes(4).toString('hex')}`,
-        name: sanitizeString(item.name, 120) ?? 'Skill',
-        description: sanitizeString(item.description, 600) ?? '',
-        instructions: sanitizeString(item.instructions, 60_000) ?? '',
-        enabled: item.enabled !== false,
-        source: item.source === 'npm' ? 'npm' : item.source === 'folder' ? 'folder' : undefined,
-        package: sanitizeString(item.package, 200),
-        version: sanitizeString(item.version, 60),
-        files: Object.keys(files).length > 0 ? files : undefined,
-      }
-    })
-  }
+  // Skills are folders on disk (lib/skills.mjs), not settings.
+  delete next.skills
 
   return next
 }
@@ -308,7 +290,6 @@ function sanitizeChats(payload) {
       ...raw,
       id: raw.id.slice(0, 120),
       title: typeof raw.title === 'string' ? raw.title.slice(0, 300) : 'Untitled',
-      systemPrompt: typeof raw.systemPrompt === 'string' ? raw.systemPrompt.slice(0, 60_000) : undefined,
       // Keep the newest messages: slicing from the start dropped the latest replies.
       messages: raw.messages.slice(-2000),
       updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
@@ -484,6 +465,7 @@ async function handleDeploy(req, res) {
     const result = await runDeploy(payload, {
       signal: controller.signal,
       onLog: (entry) => write({ type: 'log', ...entry }),
+      onStep: (step) => write({ type: 'step', ...step }),
     })
     write({ type: 'done', result })
     res.end()
@@ -672,6 +654,48 @@ async function route(req, res) {
       return
     }
 
+    if (pathname === '/api/skills' && method === 'GET') {
+      json(res, 200, { skills: await listSkills() })
+      return
+    }
+
+    if (pathname === '/api/skills/upload' && method === 'POST') {
+      const body = await readJson(req, 12 * 1024 * 1024)
+      const installed = await installSkillUpload(body.files)
+      json(res, 201, { installed, skills: await listSkills() })
+      return
+    }
+
+    if (pathname === '/api/skills/npm' && method === 'POST') {
+      const body = await readJson(req, 16 * 1024)
+      const installed = await installSkillFromNpm(body.spec)
+      json(res, 201, { installed, skills: await listSkills() })
+      return
+    }
+
+    if (pathname === '/api/skills/read' && method === 'POST') {
+      const body = await readJson(req, 16 * 1024)
+      json(res, 200, await readSkill(body.name, body.file))
+      return
+    }
+
+    const skillRoute = /^\/api\/skills\/([a-z0-9][a-z0-9._-]{0,63})(?:\/(enabled))?$/.exec(pathname)
+    if (skillRoute) {
+      const [, skillName, action] = skillRoute
+      if (action === 'enabled' && method === 'PUT') {
+        const body = await readJson(req, 4 * 1024)
+        await setSkillEnabled(skillName, body.enabled === true)
+        json(res, 200, { skills: await listSkills() })
+        return
+      }
+      if (!action && method === 'DELETE') {
+        await removeSkill(skillName)
+        json(res, 200, { skills: await listSkills() })
+        return
+      }
+      throw new HttpError(405, 'Method not allowed.', 'method_not_allowed')
+    }
+
     if (pathname === '/api/plugins' && method === 'GET') {
       json(res, 200, { plugins: await listPlugins() })
       return
@@ -802,21 +826,14 @@ async function route(req, res) {
       return
     }
 
-    if (pathname === '/api/deploy/inspect' && method === 'POST') {
-      const body = await readJson(req)
-      json(res, 200, await inspectDeployProject(String(body.path ?? '')))
+    if (pathname === '/api/deploy/detect' && method === 'POST') {
+      const body = await readJson(req, 16 * 1024)
+      json(res, 200, { project: await detectProject(body.path) })
       return
     }
 
     if (pathname === '/api/deploy' && method === 'POST') {
       await handleDeploy(req, res)
-      return
-    }
-
-    if (pathname === '/api/skills/install' && method === 'POST') {
-      const body = await readJson(req)
-      const skill = await installSkillFromNpm(String(body.package ?? ''))
-      json(res, 200, { skill })
       return
     }
 
@@ -1027,7 +1044,7 @@ async function route(req, res) {
     if (pathname === '/api/tools/execute' && method === 'POST') {
       const body = await readJson(req, 24 * 1024 * 1024)
       const name = String(body.name ?? '')
-      if (!TOOL_NAMES.has(name) || name === 'subagent') {
+      if (!TOOL_NAMES.has(name) || name === 'subagent' || name === 'skill') {
         throw new HttpError(400, `Unknown tool: ${name}`, 'unknown_tool')
       }
       const result = await executeTool(name, body.args ?? {}, {

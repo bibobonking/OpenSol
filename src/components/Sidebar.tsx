@@ -244,12 +244,13 @@ export function Sidebar() {
         <button
           type="button"
           disabled
-          title="Plugins are disabled for maintenance"
-          className="nav-item cursor-not-allowed opacity-45"
+          aria-disabled="true"
+          title="Plugins are temporarily disabled for maintenance"
+          className="nav-item cursor-not-allowed opacity-50"
         >
           <Package size={15} strokeWidth={1.7} className="shrink-0 text-faint" />
           Plugins
-          <span className="ml-auto rounded bg-raised px-1.5 py-0.5 text-[8.5px] font-medium text-faint">maintenance</span>
+          <span className="ml-auto rounded-full bg-warning/10 px-1.5 py-px text-[9px] font-medium text-warning">Maintenance</span>
         </button>
         <button
           type="button"

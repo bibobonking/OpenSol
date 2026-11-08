@@ -1,67 +1,77 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   Check,
   Cloud,
   Copy,
   ExternalLink,
   FolderOpen,
   Globe2,
+  Hammer,
+  PackageOpen,
   Play,
   Rocket,
+  ScanSearch,
   ShieldCheck,
-  Sparkles,
   Square,
-  Triangle,
   Terminal,
+  Triangle,
+  UploadCloud,
   X,
 } from 'lucide-react'
-import type { DeployProviderId, DeployResult } from '../types'
-import { inspectDeploy, streamDeploy, type DeployInspection } from '../lib/daemon'
+import type { DeployDetection, DeployProviderId, DeployResult } from '../types'
+import { detectDeployProject, streamDeploy } from '../lib/daemon'
 import { cn } from '../lib/utils'
 import { useSettings } from '../store/settings'
 import { useUi } from '../store/ui'
 import { useWorkspace } from '../store/workspace'
+import { FolderIcon } from './FileIcon'
 import { Modal, Spinner } from './ui'
 
 const PROVIDERS: Array<{
   id: DeployProviderId
   label: string
-  short: string
   icon: typeof Cloud
+  tint: string
   blurb: string
   needs: string
 }> = [
-  {
-    id: 'cloudflare',
-    label: 'Cloudflare Pages',
-    short: 'Pages',
-    icon: Cloud,
-    blurb: 'Fast global hosting with a generous free tier.',
-    needs: 'API token + account id',
-  },
-  {
-    id: 'netlify',
-    label: 'Netlify',
-    short: 'Netlify',
-    icon: Globe2,
-    blurb: 'Create a site and publish a folder in one step.',
-    needs: 'Personal access token',
-  },
-  {
-    id: 'vercel',
-    label: 'Vercel',
-    short: 'Vercel',
-    icon: Triangle,
-    blurb: 'Production deploys through the Vercel CLI.',
-    needs: 'Access token',
-  },
+  { id: 'cloudflare', label: 'Cloudflare Pages', icon: Cloud, tint: '#f6821f', blurb: 'Global edge, generous free tier', needs: 'API token + account id' },
+  { id: 'netlify', label: 'Netlify', icon: Globe2, tint: '#00c7b7', blurb: 'Creates the site once, then reuses it', needs: 'Personal access token' },
+  { id: 'vercel', label: 'Vercel', icon: Triangle, tint: '#8b95a5', blurb: 'Production deploy through the CLI', needs: 'Access token' },
 ]
+
+const STEPS = [
+  { id: 'prepare', label: 'Inspect', icon: ScanSearch },
+  { id: 'build', label: 'Build', icon: Hammer },
+  { id: 'publish', label: 'Publish', icon: UploadCloud },
+] as const
+
+type StepId = (typeof STEPS)[number]['id']
+type StepState = 'idle' | 'active' | 'done' | 'error'
 
 interface LogLine {
   id: number
   stream: 'stdout' | 'stderr' | 'meta'
   text: string
 }
+
+const inputClass =
+  'h-9 w-full rounded-lg border border-line bg-panel px-2.5 font-mono text-[11px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent/50 disabled:opacity-60'
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1.5 flex items-baseline gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">
+        {label}
+        {hint && <span className="font-normal normal-case tracking-normal">{hint}</span>}
+      </p>
+      {children}
+    </div>
+  )
+}
+
+const IDLE: Record<StepId, StepState> = { prepare: 'idle', build: 'idle', publish: 'idle' }
 
 export function DeployModal() {
   const open = useUi((state) => state.deployOpen)
@@ -79,9 +89,10 @@ export function DeployModal() {
   const [outputDir, setOutputDir] = useState('')
   const [buildCommand, setBuildCommand] = useState('')
   const [projectName, setProjectName] = useState('')
-  const [inspection, setInspection] = useState<DeployInspection | null>(null)
-  const [inspecting, setInspecting] = useState(false)
+  const [detected, setDetected] = useState<DeployDetection | null>(null)
+  const [detectError, setDetectError] = useState('')
   const [running, setRunning] = useState(false)
+  const [steps, setSteps] = useState<Record<StepId, StepState>>(IDLE)
   const [logs, setLogs] = useState<LogLine[]>([])
   const [result, setResult] = useState<DeployResult | null>(null)
   const [error, setError] = useState('')
@@ -89,66 +100,77 @@ export function DeployModal() {
   const abortRef = useRef<AbortController | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
   const logId = useRef(0)
+  const currentStep = useRef<StepId | null>(null)
 
   const meta = PROVIDERS.find((entry) => entry.id === provider) ?? PROVIDERS[0]
   const tool = deployTools?.[provider]
   const configured = Boolean(deploySecrets?.[provider]?.configured)
-  const lastUrl = deploySecrets?.[provider]?.fields?.lastUrl ?? ''
 
   useEffect(() => {
     if (!open) return
     setPath(workspaceRoot)
-    setOutputDir('')
-    setBuildCommand('')
-    setProjectName('')
-    setInspection(null)
     setResult(null)
     setError('')
     setLogs([])
     setRunning(false)
     setCopied(false)
+    setSteps(IDLE)
   }, [open, workspaceRoot])
 
-  const detect = async (target = path) => {
-    if (!target.trim()) return
-    setInspecting(true)
-    try {
-      const info = await inspectDeploy(target.trim())
-      setInspection(info)
-      if (info.buildCommand) setBuildCommand((value) => value || info.buildCommand)
-      if (info.outputDir) setOutputDir((value) => value || info.outputDir)
-      if (info.name) setProjectName((value) => value || info.name)
-    } catch (cause) {
-      setInspection(null)
-      setError(cause instanceof Error ? cause.message : 'Could not inspect that folder.')
-    } finally {
-      setInspecting(false)
-    }
-  }
-
-  // Fill the form from the real project once the path settles.
+  // Look at the folder so the build command and output folder are suggested instead of guessed.
   useEffect(() => {
-    if (!open || !path.trim()) return
-    const timer = window.setTimeout(() => void detect(path), 450)
-    return () => window.clearTimeout(timer)
+    if (!open || !path.trim()) {
+      setDetected(null)
+      setDetectError('')
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      detectDeployProject(path.trim())
+        .then((project) => {
+          if (cancelled) return
+          setDetected(project)
+          setDetectError('')
+        })
+        .catch((cause) => {
+          if (cancelled) return
+          setDetected(null)
+          setDetectError(cause instanceof Error ? cause.message : 'Could not read that folder.')
+        })
+    }, 350)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [open, path])
 
   useEffect(() => {
-    if (!open) return
     const node = logRef.current
     if (node) node.scrollTop = node.scrollHeight
-  }, [logs, open])
+  }, [logs])
 
-  useEffect(() => {
-    return () => abortRef.current?.abort()
-  }, [])
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   const append = (stream: LogLine['stream'], text: string) => {
     const clean = text.trimEnd()
     if (!clean) return
     logId.current += 1
     const id = logId.current
-    setLogs((current) => [...current.slice(-500), { id, stream, text: clean }])
+    setLogs((current) => [...current.slice(-600), { id, stream, text: clean }])
+  }
+
+  const startStep = (id: string) => {
+    const mapped: StepId = id === 'prepare' || id === 'publish' ? id : 'build'
+    setSteps((current) => {
+      const next = { ...current }
+      for (const step of STEPS) {
+        if (step.id === mapped) next[step.id] = 'active'
+        else if (next[step.id] === 'active') next[step.id] = 'done'
+      }
+      if (mapped === 'publish' && next.build === 'idle') next.build = 'done'
+      return next
+    })
+    currentStep.current = mapped
   }
 
   const close = () => {
@@ -166,9 +188,12 @@ export function DeployModal() {
     setResult(null)
     setError('')
     setLogs([])
+    setSteps({ ...IDLE, prepare: 'active' })
+    currentStep.current = 'prepare'
     const controller = new AbortController()
     abortRef.current = controller
-    append('meta', `Preparing ${meta.label} deploy from ${path.trim()}`)
+    append('meta', `Deploying ${path.trim()} to ${meta.label}`)
+    let failed = false
     try {
       for await (const event of streamDeploy(
         {
@@ -180,13 +205,15 @@ export function DeployModal() {
         },
         controller.signal,
       )) {
-        if (event.type === 'log') append(event.stream, event.text)
-        else if (event.type === 'start') append('meta', `Deploying ${event.provider}${event.path ? ` · ${event.path}` : ''}`)
+        if (event.type === 'step') startStep(event.id)
+        else if (event.type === 'log') append(event.stream, event.text)
         else if (event.type === 'done') {
           setResult(event.result)
-          append('meta', `Published ${event.result.url}`)
+          setSteps({ prepare: 'done', build: 'done', publish: 'done' })
+          append('meta', `Live at ${event.result.url}`)
           break
         } else if (event.type === 'error') {
+          failed = true
           setError(event.message)
           append('stderr', event.message)
           break
@@ -195,12 +222,18 @@ export function DeployModal() {
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') {
         append('meta', 'Deployment stopped.')
+        setSteps(IDLE)
       } else {
+        failed = true
         const message = cause instanceof Error ? cause.message : 'The deployment failed.'
         setError(message)
         append('stderr', message)
       }
     } finally {
+      if (failed && currentStep.current) {
+        const failedStep = currentStep.current
+        setSteps((current) => ({ ...current, [failedStep]: 'error' }))
+      }
       abortRef.current = null
       setRunning(false)
     }
@@ -217,94 +250,68 @@ export function DeployModal() {
     }
   }
 
+  const folderName = path.trim().split(/[\\/]/).filter(Boolean).pop() ?? ''
+
   return (
-    <Modal open={open} onClose={close} labelledBy="deploy-title" wide className="h-[92dvh] p-0 sm:h-[min(90dvh,760px)]">
-      <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+    <Modal open={open} onClose={close} labelledBy="deploy-title" wide className="h-[92dvh] p-0 sm:h-[min(90dvh,780px)]">
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-line px-5 py-3.5 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-on-accent shadow-pill">
             <Rocket size={17} />
           </span>
           <div className="min-w-0">
-            <h2 id="deploy-title" className="font-display text-[20px] font-semibold tracking-[-0.02em] text-ink">
-              Deploy a site
+            <h2 id="deploy-title" className="font-display text-[19px] font-semibold leading-tight tracking-[-0.02em] text-ink">
+              Deploy
             </h2>
-            <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted">
-              Publish the open workspace or another project folder. Tokens stay encrypted on this machine.
-            </p>
+            <p className="truncate text-[11.5px] text-muted">Build and publish a folder to a live URL. Tokens stay encrypted on this machine.</p>
           </div>
         </div>
-        <button type="button" className="icon-button -mr-1 shrink-0" onClick={close} aria-label="Close deploy panel">
+        <button type="button" className="icon-button shrink-0" onClick={close} aria-label="Close deploy panel">
           <X size={16} />
         </button>
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,390px)_minmax(0,1fr)]">
         <div className="thin-scroll min-h-0 overflow-y-auto border-b border-line lg:border-b-0 lg:border-r">
           <div className="space-y-5 p-5">
-            <div>
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Host</p>
-              <div className="grid gap-1.5">
+            <Field label="Host">
+              <div className="grid grid-cols-3 gap-1.5">
                 {PROVIDERS.map((entry) => {
                   const Icon = entry.icon
                   const active = provider === entry.id
+                  const ready = deploySecrets?.[entry.id]?.configured
                   return (
                     <button
                       key={entry.id}
                       type="button"
                       onClick={() => setProvider(entry.id)}
                       disabled={running}
+                      aria-pressed={active}
                       className={cn(
-                        'group/host flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-200 disabled:opacity-60',
-                        active
-                          ? 'border-accent/40 bg-gradient-to-br from-accent-soft/80 to-panel shadow-pill'
-                          : 'border-line bg-panel hover:border-line hover:bg-raised/50',
+                        'relative flex flex-col items-start gap-2 rounded-xl border p-2.5 text-left transition-all disabled:opacity-60',
+                        active ? 'border-accent/50 bg-accent-soft/50 shadow-pill' : 'border-line bg-panel hover:bg-raised/60',
                       )}
                     >
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg text-white" style={{ backgroundColor: entry.tint }}>
+                        <Icon size={14} />
+                      </span>
+                      <span className="text-[11.5px] font-medium leading-tight text-ink">{entry.label}</span>
                       <span
-                        className={cn(
-                          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors',
-                          active ? 'bg-accent text-on-accent shadow-pill' : 'bg-raised text-muted group-hover/host:text-ink',
-                        )}
-                      >
-                        <Icon size={13} />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className={cn('text-[12px] font-medium', active ? 'text-accent' : 'text-ink')}>
-                            {entry.label}
-                          </span>
-                          {deploySecrets?.[entry.id]?.configured ? (
-                            <Check size={11} className="text-success" />
-                          ) : (
-                            <span className="text-[9px] text-warning">needs token</span>
-                          )}
-                        </span>
-                        <span className="mt-0.5 block text-[10px] leading-relaxed text-faint">{entry.blurb}</span>
-                      </span>
+                        className={cn('absolute right-2 top-2 h-1.5 w-1.5 rounded-full', ready ? 'bg-success' : 'bg-warning')}
+                        title={ready ? 'Credentials saved' : 'Needs credentials'}
+                      />
                     </button>
                   )
                 })}
               </div>
-            </div>
-
-            {lastUrl && (
-              <a
-                href={lastUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-line bg-raised/30 px-2.5 py-1.5 text-[9.5px] text-muted hover:text-ink"
-              >
-                <ExternalLink size={10} className="shrink-0 text-faint" />
-                <span className="truncate">Last deploy: {lastUrl}</span>
-              </a>
-            )}
+              <p className="mt-1.5 text-[10px] text-faint">{meta.blurb}</p>
+            </Field>
 
             {!configured && (
-              <div className="rounded-xl border border-warning/25 bg-warning/[0.045] p-3">
+              <div className="rounded-xl border border-warning/25 bg-warning/[0.05] p-3">
                 <p className="flex items-start gap-1.5 text-[10.5px] leading-relaxed text-muted">
                   <ShieldCheck size={12} className="mt-0.5 shrink-0 text-warning" />
-                  {meta.label} needs {meta.needs}. Add it once in Settings → Deploy; it is encrypted with AES-256-GCM
-                  and never appears in the page again.
+                  {meta.label} needs {meta.needs}. Add it once in Settings → Deploy; it is encrypted and never shown again.
                 </p>
                 <button
                   type="button"
@@ -319,112 +326,104 @@ export function DeployModal() {
               </div>
             )}
 
-            <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2">
-                <label htmlFor="deploy-path" className="text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">
-                  Project folder
-                </label>
-                {workspaceAvailable && (
-                  <button
-                    type="button"
-                    onClick={() => setPath(workspaceRoot)}
-                    disabled={running}
-                    className="inline-flex items-center gap-1 text-[9.5px] font-medium text-accent disabled:opacity-40"
-                  >
-                    <FolderOpen size={10} />
-                    Use open workspace
-                  </button>
-                )}
-              </div>
+            <Field label="Project folder">
               <input
-                id="deploy-path"
                 value={path}
                 onChange={(event) => setPath(event.target.value)}
                 disabled={running}
                 placeholder="/absolute/path/to/project or ~/Projects/site"
                 spellCheck={false}
-                className="h-9 w-full rounded-lg border border-line bg-panel px-2.5 font-mono text-[10.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent/50 disabled:opacity-60"
+                className={inputClass}
+                aria-label="Project folder"
               />
-              <div className="mt-1.5 flex items-center gap-2">
-                <p className="min-w-0 flex-1 truncate text-[9px] leading-relaxed text-faint">
-                  {workspaceAvailable ? `Open workspace: ${workspaceName}` : 'No workspace open.'} Any folder that already exists on this machine.
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-[10px] text-faint">
+                  {workspaceAvailable ? `Open workspace: ${workspaceName}` : 'No workspace open.'}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => void detect()}
-                  disabled={running || inspecting || !path.trim()}
-                  className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-line bg-panel px-1.5 text-[9px] font-medium text-muted hover:text-ink disabled:opacity-40"
-                >
-                  {inspecting ? <Spinner size={9} /> : <Sparkles size={9} />}
-                  Detect
-                </button>
+                {workspaceAvailable && path !== workspaceRoot && (
+                  <button
+                    type="button"
+                    onClick={() => setPath(workspaceRoot)}
+                    disabled={running}
+                    className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-accent disabled:opacity-40"
+                  >
+                    <FolderOpen size={10} /> Use workspace
+                  </button>
+                )}
               </div>
-              {inspection && (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-line bg-raised/40 px-2 py-1.5 text-[9px] text-muted">
-                  <span className="rounded bg-panel px-1.5 py-0.5 font-medium text-ink">{inspection.framework}</span>
-                  {inspection.existingOutputs.length > 0 && <span>build output: {inspection.existingOutputs.join(', ')}</span>}
-                  {!inspection.hasPackageJson && <span>static folder, no package.json</span>}
+
+              {detected && (
+                <div className="mt-2 flex items-start gap-2.5 rounded-xl border border-line bg-raised/40 p-2.5">
+                  <FolderIcon name={detected.outputDir || 'src'} open size={22} />
+                  <div className="min-w-0 flex-1 text-[10.5px] leading-relaxed">
+                    <p className="font-medium text-ink">
+                      {detected.framework || 'Folder'}
+                      {detected.packageManager && <span className="ml-1.5 font-normal text-faint">{detected.packageManager}</span>}
+                    </p>
+                    <p className="text-muted">
+                      {detected.buildCommand ? (
+                        <>
+                          build <code className="font-mono text-ink">{detected.buildCommand}</code>
+                        </>
+                      ) : (
+                        'no build step'
+                      )}
+                      {' → '}
+                      {detected.outputDir ? (
+                        <code className="font-mono text-ink">{detected.outputDir}</code>
+                      ) : detected.expectedOutputDir ? (
+                        <>
+                          <code className="font-mono text-ink">{detected.expectedOutputDir}</code> <span className="text-faint">(after build)</span>
+                        </>
+                      ) : (
+                        <span className="text-warning">no output folder found</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
               )}
-            </div>
+              {detectError && (
+                <p className="mt-2 flex items-start gap-1.5 text-[10.5px] leading-relaxed text-danger">
+                  <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                  {detectError}
+                </p>
+              )}
+            </Field>
 
             <div className="grid grid-cols-2 gap-2.5">
-              <div>
-                <label htmlFor="deploy-output" className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">
-                  Output folder
-                </label>
+              <Field label="Output folder" hint="auto">
                 <input
-                  id="deploy-output"
                   value={outputDir}
                   onChange={(event) => setOutputDir(event.target.value)}
                   disabled={running}
-                  placeholder="auto"
+                  placeholder={detected?.outputDir || detected?.expectedOutputDir || 'auto'}
                   spellCheck={false}
-                  className="h-8 w-full rounded-lg border border-line bg-panel px-2 font-mono text-[10.5px] text-ink outline-none focus:border-accent/50 disabled:opacity-60"
+                  className={inputClass}
+                  aria-label="Output folder"
                 />
-              </div>
-              <div>
-                <label htmlFor="deploy-name" className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">
-                  Project name
-                </label>
+              </Field>
+              <Field label="Project name" hint="auto">
                 <input
-                  id="deploy-name"
                   value={projectName}
                   onChange={(event) => setProjectName(event.target.value)}
                   disabled={running}
-                  placeholder="my-site"
+                  placeholder={detected?.name || 'my-site'}
                   spellCheck={false}
-                  className="h-8 w-full rounded-lg border border-line bg-panel px-2 font-mono text-[10.5px] text-ink outline-none focus:border-accent/50 disabled:opacity-60"
+                  className={inputClass}
+                  aria-label="Project name"
                 />
-              </div>
+              </Field>
             </div>
 
-            <div className="flex flex-wrap gap-1">
-              {['auto', 'dist', 'build', 'out', '.'].map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setOutputDir(value)}
-                  disabled={running}
-                  className={cn('chip h-7 px-2 text-[9.5px]', (outputDir || 'auto') === value && 'chip-active')}
-                >
-                  {value}
-                </button>
-              ))}
-            </div>
-
-            <div>
-              <label htmlFor="deploy-build" className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">
-                Build command <span className="font-normal normal-case tracking-normal text-faint">optional</span>
-              </label>
+            <Field label="Build command" hint="auto when the output folder is missing">
               <input
-                id="deploy-build"
                 value={buildCommand}
                 onChange={(event) => setBuildCommand(event.target.value)}
                 disabled={running}
-                placeholder="npm run build"
+                placeholder={detected?.buildCommand || 'npm run build'}
                 spellCheck={false}
-                className="h-8 w-full rounded-lg border border-line bg-panel px-2 font-mono text-[10.5px] text-ink outline-none focus:border-accent/50 disabled:opacity-60"
+                className={inputClass}
+                aria-label="Build command"
               />
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {['npm run build', 'pnpm build', 'yarn build'].map((value) => (
@@ -433,121 +432,136 @@ export function DeployModal() {
                     type="button"
                     onClick={() => setBuildCommand(value)}
                     disabled={running}
-                    className="rounded-md border border-line px-1.5 py-0.5 text-[9px] text-faint transition-colors hover:text-ink"
+                    className="rounded-md border border-line px-1.5 py-0.5 text-[9.5px] text-faint transition-colors hover:text-ink"
                   >
                     {value}
                   </button>
                 ))}
-                {buildCommand && (
+                {(buildCommand || outputDir) && (
                   <button
                     type="button"
-                    onClick={() => setBuildCommand('')}
+                    onClick={() => {
+                      setBuildCommand('')
+                      setOutputDir('')
+                    }}
                     disabled={running}
-                    className="px-1.5 py-0.5 text-[9px] text-faint hover:text-danger"
+                    className="px-1.5 py-0.5 text-[9.5px] text-faint hover:text-danger"
                   >
-                    clear
+                    reset to auto
                   </button>
                 )}
               </div>
-            </div>
+            </Field>
 
-            <div className="flex items-start gap-1.5 rounded-lg border border-line bg-raised/40 px-2.5 py-2 text-[9.5px] leading-relaxed text-faint">
+            <div className="flex items-start gap-1.5 rounded-lg border border-line bg-raised/40 px-2.5 py-2 text-[10px] leading-relaxed text-faint">
               <Terminal size={11} className="mt-0.5 shrink-0" />
               {tool?.installed
-                ? `${tool.label} ${tool.version ? `(${tool.version})` : ''} is installed locally.`
-                : `${tool?.label ?? meta.short} CLI is not installed; OpenSol will use npx for this deploy.`}
+                ? `${tool.label}${tool.version ? ` ${tool.version}` : ''} found on this machine.`
+                : `${tool?.label ?? 'The CLI'} is not installed; OpenSol will fetch it with npx for this deploy.`}
             </div>
           </div>
         </div>
 
         <div className="flex min-h-0 flex-col">
-          <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">
-            <span className={cn('h-1.5 w-1.5 rounded-full', running ? 'animate-breathe bg-accent' : result ? 'bg-success' : 'bg-faint')} />
-            <p className="min-w-0 flex-1 truncate text-[11px] font-medium text-muted">
-              {running ? `Deploying with ${meta.label}…` : result ? 'Deployment complete' : 'Deploy output'}
-            </p>
-            {running && (
+          <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-3">
+            <ol className="flex min-w-0 flex-1 items-center gap-1.5">
+              {STEPS.map((step, index) => {
+                const state = steps[step.id]
+                const Icon = step.icon
+                return (
+                  <li key={step.id} className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      className={cn(
+                        'flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[10.5px] font-medium transition-colors',
+                        state === 'active' && 'border-accent/40 bg-accent-soft text-accent',
+                        state === 'done' && 'border-success/30 bg-success/10 text-success',
+                        state === 'error' && 'border-danger/30 bg-danger/10 text-danger',
+                        state === 'idle' && 'border-line text-faint',
+                      )}
+                    >
+                      {state === 'active' ? (
+                        <Spinner size={11} />
+                      ) : state === 'done' ? (
+                        <Check size={11} />
+                      ) : state === 'error' ? (
+                        <AlertTriangle size={11} />
+                      ) : (
+                        <Icon size={11} />
+                      )}
+                      <span className="hidden sm:inline">{step.label}</span>
+                    </span>
+                    {index < STEPS.length - 1 && <span className={cn('h-px w-4 shrink-0', state === 'done' ? 'bg-success/40' : 'bg-line')} />}
+                  </li>
+                )
+              })}
+            </ol>
+            {running ? (
               <button
                 type="button"
                 onClick={() => abortRef.current?.abort()}
-                className="inline-flex h-7 items-center gap-1 rounded-lg border border-line px-2 text-[10px] font-medium text-muted hover:text-ink"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[11px] font-medium text-muted hover:text-ink"
               >
                 <Square size={9} fill="currentColor" /> Stop
               </button>
-            )}
-            {!running && (
+            ) : (
               <button
                 type="button"
                 onClick={() => void deploy()}
                 disabled={!configured || !path.trim()}
-                className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-accent px-2.5 text-[10.5px] font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[11.5px] font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Play size={10} fill="currentColor" />
-                Deploy
+                {result || error ? 'Deploy again' : 'Deploy'}
               </button>
             )}
           </div>
 
           {result && (
-            <div className="shrink-0 border-b border-line bg-success/[0.045] px-4 py-3">
-              <div className="flex items-start gap-2">
-                <Check size={14} className="mt-0.5 shrink-0 text-success" />
+            <div className="shrink-0 border-b border-line bg-success/[0.05] px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+                  <Check size={17} />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11.5px] font-medium text-ink">Published successfully</p>
-                  <a
-                    href={result.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-0.5 block truncate text-[11px] text-accent hover:underline"
-                  >
+                  <p className="text-[11px] font-medium text-muted">Live on {meta.label}</p>
+                  <a href={result.url} target="_blank" rel="noreferrer" className="block truncate text-[14px] font-semibold text-accent hover:underline">
                     {result.url}
                   </a>
                 </div>
-                <button type="button" onClick={copyUrl} className="icon-button h-7 w-7" title="Copy URL" aria-label="Copy URL">
-                  {copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+                <button type="button" onClick={copyUrl} className="icon-button h-8 w-8" title="Copy URL" aria-label="Copy URL">
+                  {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
                 </button>
-                <a
-                  href={result.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="icon-button h-7 w-7"
-                  title="Open site"
-                  aria-label="Open site"
-                >
-                  <ExternalLink size={12} />
+                <a href={result.url} target="_blank" rel="noreferrer" className="icon-button h-8 w-8" title="Open site" aria-label="Open site">
+                  <ExternalLink size={13} />
                 </a>
               </div>
             </div>
           )}
 
           {error && (
-            <div className="shrink-0 border-b border-danger/20 bg-danger/[0.045] px-4 py-2.5 text-[10.5px] leading-relaxed text-danger">
+            <div className="flex shrink-0 items-start gap-2 border-b border-danger/20 bg-danger/[0.05] px-4 py-2.5 text-[11px] leading-relaxed text-danger">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
               {error}
             </div>
           )}
 
           <div ref={logRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto bg-canvas/40 px-4 py-3">
             {logs.length === 0 && !running ? (
-              <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-2 px-6 text-center">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-raised text-faint">
-                  <Rocket size={17} />
+              <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 px-6 text-center">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-raised text-faint">
+                  <PackageOpen size={18} />
                 </span>
-                <p className="text-[11.5px] font-medium text-muted">Ready when you are</p>
-                <p className="max-w-[260px] text-[10px] leading-relaxed text-faint">
-                  The build and deploy output appears here. Credentials are passed to the CLI through the environment,
-                  never printed in the log.
+                <p className="text-[12px] font-medium text-muted">Ready when you are</p>
+                <p className="max-w-[280px] text-[10.5px] leading-relaxed text-faint">
+                  Leave the fields on auto: OpenSol installs dependencies, builds if there is no output folder yet, then publishes it. Tokens never appear in the log.
                 </p>
               </div>
             ) : (
-              <pre className="whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.7] text-muted">
+              <pre className="whitespace-pre-wrap break-words font-mono text-[10.5px] leading-[1.7] text-muted">
                 {logs.map((line) => (
                   <span
                     key={line.id}
-                    className={cn(
-                      'block',
-                      line.stream === 'stderr' && 'text-danger',
-                      line.stream === 'meta' && 'text-accent',
-                    )}
+                    className={cn('block', line.stream === 'stderr' && 'text-danger', line.stream === 'meta' && 'font-medium text-accent')}
                   >
                     {line.stream === 'meta' ? '› ' : ''}
                     {line.text}
@@ -562,10 +576,10 @@ export function DeployModal() {
             )}
           </div>
 
-          <div className="flex h-9 shrink-0 items-center gap-2 border-t border-line px-4 text-[9px] text-faint">
+          <div className="flex h-9 shrink-0 items-center gap-2 border-t border-line px-4 text-[10px] text-faint">
             <ShieldCheck size={10} />
             Tokens encrypted at rest
-            <span className="ml-auto">{path.trim() ? path.trim().split(/[\\/]/).filter(Boolean).pop() : 'No folder'}</span>
+            <span className="ml-auto truncate">{folderName || 'No folder'}</span>
           </div>
         </div>
       </div>

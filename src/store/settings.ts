@@ -9,7 +9,6 @@ import type {
   ProviderId,
   SecretEntry,
   SecretsSummary,
-  Skill,
   BuiltinToolName,
   ToolSetting,
 } from '../types'
@@ -58,7 +57,7 @@ const DEFAULT_TOOLS: Record<BuiltinToolName, ToolSetting> = {
   read_url: { enabled: true, approval: 'auto' },
   git: { enabled: true, approval: 'ask' },
   subagent: { enabled: true, approval: 'ask' },
-  skill: { enabled: true, approval: 'ask' },
+  skill: { enabled: true, approval: 'auto' },
 }
 
 const DEFAULTS: AppSettings = {
@@ -73,7 +72,6 @@ const DEFAULTS: AppSettings = {
   providers: {},
   searchProvider: 'duckduckgo',
   tools: DEFAULT_TOOLS,
-  skills: [],
   theme: 'system',
   showTokenEstimate: true,
   mode: 'build',
@@ -102,9 +100,6 @@ interface SettingsStore extends AppSettings {
   saveDeployCredentials: (provider: DeployProviderId, fields: Record<string, string>) => Promise<void>
   refreshProviders: () => Promise<void>
   updateTool: (tool: BuiltinToolName, patch: Partial<ToolSetting>) => void
-  addSkill: (skill: Skill) => void
-  updateSkill: (id: string, patch: Partial<Skill>) => void
-  removeSkill: (id: string) => void
   setMode: (mode: AppSettings['mode']) => void
   flush: () => Promise<void>
 }
@@ -122,18 +117,6 @@ function mergeTools(saved?: Partial<Record<BuiltinToolName, Partial<ToolSetting>
   return merged
 }
 
-function mergeSkills(saved?: Skill[]) {
-  // Built-in skills were removed; drop any leftovers persisted by older versions.
-  return (saved ?? [])
-    .filter((skill): skill is Skill => Boolean(skill) && typeof skill.id === 'string' && typeof skill.name === 'string' && !skill.builtIn)
-    .map((skill) => ({
-      ...skill,
-      description: typeof skill.description === 'string' ? skill.description : '',
-      instructions: typeof skill.instructions === 'string' ? skill.instructions : '',
-      enabled: skill.enabled !== false,
-    }))
-}
-
 function upgradePrompt(value: unknown) {
   if (typeof value !== 'string' || !value.trim()) return DEFAULT_SYSTEM_PROMPT
   const legacy =
@@ -141,6 +124,15 @@ function upgradePrompt(value: unknown) {
     /There is no node, npm, git or network in the shell/i.test(value) ||
     /workspace root is \/workspace/i.test(value)
   return legacy ? DEFAULT_SYSTEM_PROMPT : value
+}
+
+function sanitizeWorkspacePrompts(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!value || typeof value !== 'object') return out
+  for (const [root, prompt] of Object.entries(value as Record<string, unknown>)) {
+    if (root && typeof prompt === 'string') out[root] = prompt
+  }
+  return out
 }
 
 function sanitizeBaseUrls(saved: AppSettings['providers'] | undefined) {
@@ -181,21 +173,12 @@ function buildSettings(persisted?: Partial<AppSettings>): AppSettings {
         ? Math.max(256, Math.min(200_000, Math.round(saved.maxTokens)))
         : DEFAULTS.maxTokens,
     systemPrompt: upgradePrompt(saved.systemPrompt),
-    workspacePrompts:
-      saved.workspacePrompts && typeof saved.workspacePrompts === 'object'
-        ? Object.fromEntries(
-            Object.entries(saved.workspacePrompts).filter(
-              ([key, value]) => key.startsWith('/') && typeof value === 'string',
-            ),
-          )
-        : {},
     providers: sanitizeBaseUrls(saved.providers),
     searchProvider:
       saved.searchProvider && ['duckduckgo', 'tavily', 'brave', 'serper'].includes(saved.searchProvider)
         ? saved.searchProvider
         : DEFAULTS.searchProvider,
     tools: mergeTools(saved.tools),
-    skills: mergeSkills(saved.skills),
     theme: normalizeTheme(saved.theme),
     chatFontSize:
       typeof saved.chatFontSize === 'number' && Number.isFinite(saved.chatFontSize)
@@ -204,6 +187,7 @@ function buildSettings(persisted?: Partial<AppSettings>): AppSettings {
     workDetail: saved.workDetail === 'concise' ? 'concise' : 'detailed',
     autoCollapseWork: saved.autoCollapseWork !== false,
     aiSessionTitles: saved.aiSessionTitles !== false,
+    workspacePrompts: sanitizeWorkspacePrompts(saved.workspacePrompts),
   }
 }
 
@@ -222,11 +206,9 @@ function persistedPatch(patch: Partial<AppSettings>): Partial<AppSettings> {
     'temperature',
     'maxTokens',
     'systemPrompt',
-    'workspacePrompts',
     'providers',
     'searchProvider',
     'tools',
-    'skills',
     'theme',
     'showTokenEstimate',
     'mode',
@@ -234,6 +216,7 @@ function persistedPatch(patch: Partial<AppSettings>): Partial<AppSettings> {
     'workDetail',
     'autoCollapseWork',
     'aiSessionTitles',
+    'workspacePrompts',
   ]
   for (const key of keys) {
     if (key in patch) out[key] = patch[key]
@@ -379,21 +362,6 @@ export const useSettings = create<SettingsStore>()((set, get) => ({
   },
   updateTool: (tool, patch) => {
     const next = { tools: { ...get().tools, [tool]: { ...get().tools[tool], ...patch } } }
-    set(next)
-    queueSave(next)
-  },
-  addSkill: (skill) => {
-    const next = { skills: [...get().skills, skill] }
-    set(next)
-    queueSave(next)
-  },
-  updateSkill: (id, patch) => {
-    const next = { skills: get().skills.map((skill) => (skill.id === id ? { ...skill, ...patch } : skill)) }
-    set(next)
-    queueSave(next)
-  },
-  removeSkill: (id) => {
-    const next = { skills: get().skills.filter((skill) => skill.id !== id) }
     set(next)
     queueSave(next)
   },

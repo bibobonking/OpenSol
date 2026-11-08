@@ -2,6 +2,8 @@ import { Service, type Context } from 'cordis'
 import type { AgentMode, AppSettings } from '../../types'
 import { activeModelId } from '../../store/settings'
 import { useWorkspace } from '../../store/workspace'
+import { skillCatalogPrompt } from '../../store/skills'
+import { resolveBasePrompt } from '../../lib/system-prompt'
 import type { PromptSection } from '../types'
 
 function workspaceContext(): string {
@@ -43,31 +45,22 @@ export class SystemPromptService extends Service {
     return () => this.customSections.delete(name)
   }
 
-  assemble(
-    settings: AppSettings,
-    mode: AgentMode = settings.mode,
-    overrides: { sessionPrompt?: string; workspacePrompt?: string } = {},
-  ): string {
+  assemble(settings: AppSettings, mode: AgentMode = settings.mode, sessionId?: string): string {
     const sections: PromptSection[] = []
 
-    // 1. Base instruction: session override, then workspace override, then the shared prompt.
-    const base = overrides.sessionPrompt?.trim() || overrides.workspacePrompt?.trim() || settings.systemPrompt?.trim()
-    if (base) {
-      sections.push({ name: 'base', priority: 10, content: base })
+    // 1. Base instruction
+    // Session prompt beats workspace prompt beats the app-wide one.
+    const workspaceState = useWorkspace.getState()
+    const session = sessionId ? this.ctx.sessions.current(sessionId) : undefined
+    const base = resolveBasePrompt(settings, session, workspaceState.root || workspaceState.info.root)
+    if (base.text.trim()) {
+      sections.push({ name: 'base', priority: 10, content: base.text.trim() })
     }
 
-    // 2. Skills are discovered, not pasted: the model loads one through the skill tool.
-    const skills = settings.tools.skill?.enabled === false ? [] : settings.skills.filter((skill) => skill.enabled)
-    if (skills.length > 0) {
-      sections.push({
-        name: 'skills',
-        priority: 20,
-        content: [
-          '## Available skills',
-          'Call the `skill` tool to load the full instructions (and run scripts from the skill folder) when a task matches one of these. Do not guess a skill’s contents.',
-          ...skills.map((skill) => `- ${skill.name} (${skill.id}): ${skill.description}`),
-        ].join('\n'),
-      })
+    // 2. Skill catalog (names + descriptions; bodies load on demand through the skill tool)
+    const catalog = skillCatalogPrompt()
+    if (catalog && settings.tools.skill?.enabled !== false) {
+      sections.push({ name: 'skills', priority: 20, content: catalog })
     }
 
     // 3. Workspace
@@ -163,9 +156,9 @@ export class SystemPromptService extends Service {
     })
   }
 
-  buildSubagentPrompt(settings: AppSettings): string {
+  buildSubagentPrompt(settings: AppSettings, sessionId?: string): string {
     return [
-      this.assemble(settings, 'plan'),
+      this.assemble(settings, 'plan', sessionId),
       [
         '## Subagent',
         'You are a focused read-only investigator. Work only on the assigned task.',

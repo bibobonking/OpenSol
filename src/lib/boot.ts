@@ -4,6 +4,7 @@ import { ensureSession, getState, migrateLegacy } from './daemon'
 import { enableChatPersistence, useChats } from '../store/chats'
 import { enableSettingsPersistence, useSettings } from '../store/settings'
 import { useWorkspace } from '../store/workspace'
+import { useSkills } from '../store/skills'
 
 const LEGACY_KEYS = {
   settings: 'maxcode-settings-v1',
@@ -59,6 +60,7 @@ export async function applySnapshot(snapshot: DaemonSnapshot): Promise<void> {
   useSettings.getState().hydrate(snapshot)
   useChats.getState().hydrate(snapshot.chats)
   await useWorkspace.getState().hydrate(snapshot.workspace)
+  void useSkills.getState().load()
 }
 
 function parseLegacy(value: string | null): unknown {

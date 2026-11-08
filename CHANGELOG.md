@@ -1,19 +1,17 @@
 # Changelog
 
-## 3.1.3
+## Unreleased
 
-**New**
-- **Skills you install** — skills are no longer just `SKILL.md` files bundled with the app: upload a folder or install an npm package in Settings → Skills, and the agent loads the matching procedure with the new `skill` tool (`list` / `read` / `run`). Skill scripts run through the daemon in a throwaway temp folder and are blocked in Plan mode. Built-in skills were removed.
-- **Credits spent** — provider usage is parsed from the OpenAI-compatible `usage.cost` / `total_cost` fields (OpenRouter is asked to include usage), summed per provider and shown on the home dashboard. Providers that report no cost show `—` instead of a guessed price.
-- **Prompts per session and workspace** — the prompt button in the top bar now edits three levels: the shared prompt, a per-workspace prompt and a per-session prompt. Precedence is session → workspace → shared.
-- **File tree icons** — `FileIcon.tsx` maps extensions and special names to colored Lucide icons (code, config, markdown, images, media, locks, shells) and the workspace tree uses them.
-- **New mark** — a solar-aperture logo carries the app, favicon and desktop shell.
+- Agent loop: removed the 16-round cap (also for subagents). Provider errors now retry up to 5 times with backoff, only for transient errors (429 bursts, 5xx, overload, network); quota, credit and "limit reached" errors are never retried.
+- Model deck: hovering no longer scrolls the list, which made rows jump.
+- Plugins button disabled for maintenance.
+- Skills: real skill folders (SKILL.md + scripts/references) installed by folder upload or npm, loaded on demand through the new `skill` tool. Built-in skills removed.
+- Credits spent shown per session (top bar) and in the dashboard, for every provider (provider-reported cost, else tokens × model price).
+- File tree: colored file and folder icons, indent guides, git status marks.
+- Deploy: redesigned with steps and project detection; fixed Netlify creating a new site every deploy, Vercel org-id error, wrong URL picked from CLI output, missing output folder.
+- System prompt per session and per workspace (button in the top bar).
+- New OpenSol icon.
 
-**Changed**
-- **Deploy rebuilt** — the Deploy modal detects framework, package manager, build command and output folder through the new `/api/deploy/inspect` route, picks `dist` / `build` / `out` / `.output/public` / `public` automatically, shows the last deployment and reports failures with useful errors.
-- **No tool-round ceiling** — the agent loop no longer stops after a fixed number of tool rounds; it runs until the model stops or the user stops it.
-- **Model Deck** — hover no longer jitters the provider rail and the active provider only scrolls into view for keyboard navigation.
-- **Plugins are paused** — the Plugins button and Settings tab are disabled for maintenance; the code remains in place.
 
 ## 3.1.2
 

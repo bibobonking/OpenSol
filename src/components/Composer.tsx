@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import type { Attachment } from '../types'
+import { useSkills } from '../store/skills'
 import { activeModelId, hasCredentials, useSettings } from '../store/settings'
 import { useActiveModel, useProviderModels } from '../store/models'
 import { useUi } from '../store/ui'
@@ -124,7 +125,7 @@ export function Composer({
   const activeModel = useActiveModel()
   const connected = hasCredentials(settings)
   const efforts = effortOptions(activeModel)
-  const activeSkills = settings.skills.filter((skill) => skill.enabled).length
+  const activeSkills = useSkills((state) => state.skills.filter((skill) => skill.enabled).length)
   const permission = permissionMode(settings.tools)
   const modelLabel = !connected
     ? 'No provider'

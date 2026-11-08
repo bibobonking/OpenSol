@@ -48,7 +48,6 @@ function normalizeSession(session: ChatSession): ChatSession {
     updatedAt: typeof session.updatedAt === 'number' ? session.updatedAt : Date.now(),
     mode: session.mode === 'plan' ? 'plan' : session.mode === 'build' ? 'build' : undefined,
     workspace: typeof session.workspace === 'string' ? session.workspace : undefined,
-    systemPrompt: typeof session.systemPrompt === 'string' ? session.systemPrompt : undefined,
     titleSource:
       session.titleSource === 'ai' || session.titleSource === 'user' || session.titleSource === 'auto'
         ? session.titleSource

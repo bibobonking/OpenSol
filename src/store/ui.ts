@@ -117,7 +117,9 @@ export const useUi = create<UiState>()((set, get) => ({
   setMcpOpen: (open) => set({ mcpOpen: open, ...(open ? { mobileSidebarOpen: false, settingsOpen: false } : {}) }),
   settingsOpen: false,
   settingsTab: 'general',
-  openSettings: (tab = 'general') => set({ settingsOpen: true, settingsTab: tab, mobileSidebarOpen: false }),
+  // Plugins are paused for maintenance: any request for that tab lands on General instead.
+  openSettings: (tab = 'general') =>
+    set({ settingsOpen: true, settingsTab: tab === 'plugins' ? 'general' : tab, mobileSidebarOpen: false }),
   closeSettings: () => set({ settingsOpen: false }),
   deployOpen: false,
   setDeployOpen: (open) => set({ deployOpen: open }),

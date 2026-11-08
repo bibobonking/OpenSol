@@ -9,7 +9,7 @@ export class SubagentService extends Service {
     super(ctx, 'subagents')
   }
 
-  async run(task: string, context: string, signal: AbortSignal): Promise<string> {
-    return await runSubagent(task, context, signal)
+  async run(task: string, context: string, signal: AbortSignal, sessionId?: string): Promise<string> {
+    return await runSubagent(task, context, signal, sessionId)
   }
 }

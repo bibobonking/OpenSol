@@ -2,6 +2,7 @@ import type { AgentMode, AppSettings } from '../types'
 import { activeModelId } from '../store/settings'
 import { useWorkspace } from '../store/workspace'
 import { kernel } from '../core/kernel'
+import { skillCatalogPrompt } from '../store/skills'
 
 function workspaceContext(): string {
   const state = useWorkspace.getState()
@@ -26,22 +27,14 @@ function workspaceContext(): string {
     .join('\n')
 }
 
-export function buildSystemPrompt(settings: AppSettings, mode: AgentMode = settings.mode): string {
+export function buildSystemPrompt(settings: AppSettings, mode: AgentMode = settings.mode, sessionId?: string): string {
   if (kernel.systemPrompt) {
-    return kernel.systemPrompt.assemble(settings, mode)
+    return kernel.systemPrompt.assemble(settings, mode, sessionId)
   }
   const chunks: string[] = [settings.systemPrompt.trim()]
 
-  const skills = settings.skills.filter((skill) => skill.enabled)
-  if (skills.length > 0) {
-    chunks.push(
-      [
-        '## Available skills',
-        'Call the `skill` tool to load the full instructions (and run scripts from the skill folder) when a task matches one of these. Do not guess a skill’s contents.',
-        ...skills.map((skill) => `- ${skill.name} (${skill.id}): ${skill.description}`),
-      ].join('\n'),
-    )
-  }
+  const catalog = skillCatalogPrompt()
+  if (catalog && settings.tools.skill?.enabled !== false) chunks.push(catalog)
 
   chunks.push(
     [
@@ -89,9 +82,9 @@ export function buildSystemPrompt(settings: AppSettings, mode: AgentMode = setti
   return chunks.filter(Boolean).join('\n\n')
 }
 
-export function buildSubagentPrompt(settings: AppSettings): string {
+export function buildSubagentPrompt(settings: AppSettings, sessionId?: string): string {
   return [
-    buildSystemPrompt(settings, 'plan'),
+    buildSystemPrompt(settings, 'plan', sessionId),
     [
       '## Subagent',
       'You are a focused read-only investigator. Work only on the assigned task.',

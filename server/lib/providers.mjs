@@ -138,6 +138,7 @@ function trimCatalog(raw) {
         temperature: model.temperature !== false,
         modalities: record(model.modalities),
         limit: record(model.limit),
+        cost: record(model.cost),
         provider: record(model.provider),
         canonical_model_id: text(model.canonical_model_id),
       }
@@ -220,7 +221,26 @@ function opencodeKindFromId(modelId, catalogEntry) {
   return 'openai-chat'
 }
 
-function modelInfo({ providerId, id, name, context, maxOutput, vision, catalogEntry, fallbackKind }) {
+/** USD per 1M tokens, from a live per-token `pricing` block (OpenRouter style) or models.dev `cost`. */
+function pricingOf(livePricing, catalogCost) {
+  const live = record(livePricing)
+  const perToken = (value) => {
+    const parsed = typeof value === 'string' ? Number.parseFloat(value) : typeof value === 'number' ? value : NaN
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed * 1_000_000 : undefined
+  }
+  const liveInput = perToken(live.prompt)
+  const liveOutput = perToken(live.completion)
+  if (liveInput !== undefined && liveOutput !== undefined && (liveInput > 0 || liveOutput > 0)) {
+    return { input: liveInput, output: liveOutput }
+  }
+  const cost = record(catalogCost)
+  const input = number(cost.input)
+  const output = number(cost.output)
+  if (input !== undefined && output !== undefined && (input > 0 || output > 0)) return { input, output }
+  return undefined
+}
+
+function modelInfo({ providerId, id, name, context, maxOutput, vision, catalogEntry, fallbackKind, livePricing }) {
   const catalogDef = catalogEntry ?? {}
   const modalities = record(catalogDef.modalities)
   const limit = record(catalogDef.limit)
@@ -255,6 +275,7 @@ function modelInfo({ providerId, id, name, context, maxOutput, vision, catalogEn
     apiKind,
     free,
     canonicalId: text(catalogDef.canonical_model_id) || undefined,
+    pricing: pricingOf(livePricing, catalogDef.cost),
     note:
       providerId === 'opencode' && free
         ? 'OpenCode free-tier models only work inside OpenCode. Add credits or use a paid model.'
@@ -296,6 +317,7 @@ function fromOpenAI(payload, providerId, catalog) {
         context: number(item.context_length) ?? number(item.context_window),
         vision: strings(architecture.input_modalities).includes('image'),
         catalogEntry: entry,
+        livePricing: item.pricing,
       }),
     )
   }

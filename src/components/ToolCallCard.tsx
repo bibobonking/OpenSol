@@ -52,6 +52,8 @@ function approvalCopy(name: ToolName) {
       return 'OpenSol wants to change the Git state of this repository.'
     case 'subagent':
       return 'OpenSol wants to start a read-only subagent to investigate.'
+    case 'skill':
+      return 'OpenSol wants to load an installed skill.'
     case 'web_search':
       return 'OpenSol wants to search the web.'
     case 'read_url':

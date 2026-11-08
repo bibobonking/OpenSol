@@ -3,6 +3,7 @@ import type {
   AppSettings,
   ChatSession,
   DaemonSnapshot,
+  DeployDetection,
   DeployEvent,
   DeployProviderId,
   DeployRequest,
@@ -12,10 +13,10 @@ import type {
   ProviderId,
   ProviderStatus,
   SecretsSummary,
-  Skill,
   WorkspaceFile,
   WorkspaceInfo,
 } from '../types'
+import type { InstalledSkill } from '../types'
 import type { PluginManifest, PluginCapability } from '../../shared/plugin-package.mjs'
 
 export interface InstalledPlugin {
@@ -264,10 +265,6 @@ export function setDeployCredentials(provider: DeployProviderId, fields: Record<
   })
 }
 
-export function installSkillFromNpmRequest(packageName: string) {
-  return api<{ skill: Skill }>('/api/skills/install', { method: 'POST', body: JSON.stringify({ package: packageName }) })
-}
-
 export function resetScope(scope: 'history' | 'secrets' | 'settings' | 'all'): Promise<DaemonSnapshot> {
   return api('/api/reset', jsonBody({ scope }))
 }
@@ -457,20 +454,6 @@ export async function requestLLM(
   return response
 }
 
-export interface DeployInspection {
-  path: string
-  name: string
-  hasPackageJson: boolean
-  framework: string
-  buildCommand: string
-  outputDir: string
-  existingOutputs: string[]
-}
-
-export function inspectDeploy(path: string): Promise<DeployInspection> {
-  return api('/api/deploy/inspect', { method: 'POST', body: JSON.stringify({ path }) })
-}
-
 export async function* streamDeploy(
   request: DeployRequest,
   signal?: AbortSignal,
@@ -530,3 +513,41 @@ export async function* streamDeploy(
 }
 
 export type { DeployResult, SecretsSummary }
+
+export interface SkillUploadFile {
+  path: string
+  /** base64 */
+  data: string
+}
+
+export function listSkillsApi(): Promise<{ skills: InstalledSkill[] }> {
+  return api('/api/skills')
+}
+
+export function uploadSkillFiles(files: SkillUploadFile[]): Promise<{ installed: string[]; skills: InstalledSkill[] }> {
+  return api('/api/skills/upload', jsonBody({ files }))
+}
+
+export function installSkillNpm(spec: string): Promise<{ installed: string[]; skills: InstalledSkill[] }> {
+  return api('/api/skills/npm', jsonBody({ spec }))
+}
+
+export function setSkillEnabledApi(name: string, enabled: boolean): Promise<{ skills: InstalledSkill[] }> {
+  return api(`/api/skills/${encodeURIComponent(name)}/enabled`, { method: 'PUT', body: JSON.stringify({ enabled }) })
+}
+
+export function removeSkillApi(name: string): Promise<{ skills: InstalledSkill[] }> {
+  return api(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' })
+}
+
+export function readSkillApi(
+  name: string,
+  file?: string,
+): Promise<{ name: string; file: string; directory: string; content: string; files?: string[] }> {
+  return api('/api/skills/read', jsonBody({ name, file }))
+}
+
+export async function detectDeployProject(path: string): Promise<DeployDetection> {
+  const result = await api<{ project: DeployDetection }>('/api/deploy/detect', jsonBody({ path }))
+  return result.project
+}

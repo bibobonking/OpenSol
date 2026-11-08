@@ -190,11 +190,7 @@ export async function streamOpenAIResponses(request: AdapterRequest): Promise<Ad
       const done = itemRecord(event.response)
       const value = itemRecord(done.usage)
       if (typeof value.input_tokens === 'number' || typeof value.output_tokens === 'number') {
-        usage = {
-          input: Number(value.input_tokens) || undefined,
-          output: Number(value.output_tokens) || undefined,
-          cost: typeof value.cost === 'number' ? value.cost : undefined,
-        }
+        usage = { input: Number(value.input_tokens) || undefined, output: Number(value.output_tokens) || undefined }
         handlers.onUsage(usage)
       }
     }

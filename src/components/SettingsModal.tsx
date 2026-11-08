@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Cloud,
   Cpu,
+  Download,
   Eye,
   EyeOff,
   FilePenLine,
@@ -13,6 +14,7 @@ import {
   FileSearch,
   FileText,
   FolderTree,
+  FolderUp,
   GitBranch,
   Globe2,
   HardDrive,
@@ -38,9 +40,10 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import type { DeployProviderId, Effort, ModelInfo, ProviderId, SearchProvider, Skill, BuiltinToolName } from '../types'
+import type { DeployProviderId, Effort, InstalledSkill, ModelInfo, ProviderId, SearchProvider, BuiltinToolName } from '../types'
 import type { LucideIcon } from 'lucide-react'
 import { EFFORT_LABELS, PROVIDERS, PROVIDER_MAP } from '../data/providers'
+import { useSkills } from '../store/skills'
 import {
   DEFAULT_SYSTEM_PROMPT,
   activeModelId,
@@ -53,8 +56,7 @@ import { useChats, exportChats, importChats } from '../store/chats'
 import { useWorkspace } from '../store/workspace'
 import { stopAllRuns } from '../agent'
 import { applySnapshot } from '../lib/boot'
-import { executeDaemonTool, installSkillFromNpmRequest, resetScope } from '../lib/daemon'
-import { skillFromFolder } from '../lib/skills'
+import { executeDaemonTool, resetScope } from '../lib/daemon'
 import { effortOptions, reasoningSummary } from '../lib/reasoning'
 import { PERMISSION_MODES, permissionMode, permissionTools } from '../lib/permissions'
 import { cn, formatBytes } from '../lib/utils'
@@ -64,18 +66,19 @@ import { useMcp } from '../store/mcp'
 import { pluginRuntime } from '../plugins'
 import { Modal, Segmented, Spinner, Switch } from './ui'
 
-const TABS = [
+type TabDef = { id: string; label: string; icon: typeof Info; description: string; disabled?: boolean }
+const TABS: readonly TabDef[] = [
   { id: 'general', label: 'General', icon: SlidersHorizontal, description: 'Permissions, appearance and conversation display.' },
   { id: 'models', label: 'Models', icon: Cpu, description: 'Providers, encrypted keys, live models and reasoning defaults.' },
   { id: 'tools', label: 'Tools', icon: Wrench, description: 'What OpenSol can do on this machine, and when it must ask.' },
   { id: 'search', label: 'Search', icon: Globe2, description: 'Give the agent current web results with your own key.' },
-  { id: 'skills', label: 'Skills', icon: Sparkles, description: 'Install skill folders or npm packages. The skill tool loads SKILL.md and runs the scripts a skill ships.' },
-  { id: 'plugins', label: 'Plugins', icon: Package, description: 'Install local plugin packages, review what they ask for, and run them once you trust the code.' },
+  { id: 'skills', label: 'Skills', icon: Sparkles, description: 'Skill folders the agent loads on demand: upload a folder or install from npm.' },
+  { id: 'plugins', label: 'Plugins', icon: Package, description: 'Plugins are temporarily disabled for maintenance.', disabled: true },
   { id: 'mcp', label: 'MCP', icon: Link2, description: 'Model Context Protocol servers now have their own panel, with OAuth sign-in and local, HTTP and SSE connections.' },
   { id: 'deploy', label: 'Deploy', icon: Rocket, description: 'Hosting credentials and command-line tools.' },
   { id: 'appearance', label: 'Appearance', icon: Palette, description: 'Theme and interface preferences.' },
   { id: 'about', label: 'About', icon: Info, description: 'Local storage, history and reset controls.' },
-] as const
+]
 
 const fieldClass =
   'h-8 w-full rounded-lg border border-line bg-panel px-2.5 text-[12px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent/50 disabled:opacity-50'
@@ -630,7 +633,7 @@ function ModelsTab() {
                 className="thin-scroll w-full resize-y rounded-lg border border-line bg-panel px-2.5 py-2 font-mono text-[10.5px] leading-relaxed text-ink outline-none focus:border-accent/50"
               />
               <p className="mt-1 text-[9px] leading-relaxed text-faint">
-                This is the shared prompt. Each session and workspace can override it from the prompt button in the chat header.
+                The installed skill list and the current workspace/git context are appended after this prompt.
               </p>
             </div>
           </div>
@@ -676,7 +679,7 @@ const TOOL_COPY: Record<BuiltinToolName, { label: string; description: string }>
   read_url: { label: 'Read URL', description: 'Open a public http(s) page as plain text.' },
   git: { label: 'Git', description: 'Inspect or change repository state. Plan mode is read-only.' },
   subagent: { label: 'Subagent', description: 'Delegate a read-only investigation and return a concise report.' },
-  skill: { label: 'Skill', description: 'List installed skills, load SKILL.md, and run commands inside a skill folder.' },
+  skill: { label: 'Skill', description: 'Load an installed skill (SKILL.md and its bundled files) when a task matches it.' },
 }
 
 function ToolsTab() {
@@ -972,165 +975,202 @@ function SearchTab() {
   )
 }
 
+interface PickedFile {
+  path: string
+  file: File
+}
+
+const SKIP_PATH = /(^|\/)(node_modules|\.git|__pycache__)(\/|$)/
+const MAX_SKILL_FILE = 1024 * 1024
+
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  let binary = ''
+  const chunk = 0x8000
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk))
+  }
+  return btoa(binary)
+}
+
+function formatSkillSource(source: string) {
+  if (source.startsWith('npm:')) return source
+  if (source === 'upload') return 'Folder'
+  if (source === 'legacy') return 'Migrated'
+  return 'Local'
+}
+
 function SkillsTab() {
-  const settings = useSettings()
-  const addSkill = useSettings((state) => state.addSkill)
-  const updateSkill = useSettings((state) => state.updateSkill)
-  const removeSkill = useSettings((state) => state.removeSkill)
+  const skills = useSkills((state) => state.skills)
+  const loading = useSkills((state) => state.loading)
+  const error = useSkills((state) => state.error)
+  const load = useSkills((state) => state.load)
+  const upload = useSkills((state) => state.upload)
+  const installNpm = useSkills((state) => state.installNpm)
+  const setEnabled = useSkills((state) => state.setEnabled)
+  const remove = useSkills((state) => state.remove)
   const askConfirm = useUi((state) => state.askConfirm)
   const notify = useUi((state) => state.notify)
-  const [installing, setInstalling] = useState('')
-  const [npmName, setNpmName] = useState('')
   const folderRef = useRef<HTMLInputElement>(null)
-  const active = settings.skills.filter((skill) => skill.enabled).length
+  const [busy, setBusy] = useState<'folder' | 'npm' | null>(null)
+  const [npmSpec, setNpmSpec] = useState('')
+  const active = skills.filter((skill) => skill.enabled).length
 
   useEffect(() => {
-    const input = folderRef.current
-    if (!input) return
-    input.setAttribute('webkitdirectory', '')
-    input.setAttribute('directory', '')
-    input.setAttribute('multiple', '')
-  }, [])
+    void load()
+  }, [load])
 
-  const store = (skill: Skill, verb: string) => {
-    const exists = useSettings.getState().skills.some((entry) => entry.id === skill.id)
-    if (exists) updateSkill(skill.id, skill)
-    else addSkill(skill)
-    notify(`${skill.name} ${verb}.`, 'success')
-  }
-
-  const installFolder = async (list: FileList | null) => {
-    if (!list || list.length === 0) return
-    setInstalling('folder')
+  const uploadFolder = async (list: FileList) => {
+    const picked: PickedFile[] = Array.from(list)
+      .map((file) => ({ file, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name }))
+      .filter((item) => !SKIP_PATH.test(item.path))
+    if (picked.length === 0) return
+    const tooBig = picked.filter((item) => item.file.size > MAX_SKILL_FILE)
+    const usable = picked.filter((item) => item.file.size <= MAX_SKILL_FILE)
+    if (!usable.some((item) => /(^|\/)skill\.md$/i.test(item.path))) {
+      notify('That folder has no SKILL.md. Choose the skill folder itself (or a folder that contains skill folders).', 'error')
+      return
+    }
+    setBusy('folder')
     try {
-      const skill = await skillFromFolder(Array.from(list))
-      store(skill, 'installed')
+      const files = await Promise.all(usable.map(async (item) => ({ path: item.path, data: await fileToBase64(item.file) })))
+      const installed = await upload(files)
+      notify(
+        `Installed ${installed.join(', ')}${tooBig.length > 0 ? ` · skipped ${tooBig.length} file${tooBig.length === 1 ? '' : 's'} over 1 MB` : ''}.`,
+        'success',
+      )
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : 'Could not read that folder.', 'error')
+      notify(cause instanceof Error ? cause.message : 'Could not install that skill folder.', 'error')
     } finally {
-      setInstalling('')
+      setBusy(null)
     }
   }
 
-  const installNpm = async () => {
-    const name = npmName.trim()
-    if (!name) return
-    setInstalling('npm')
+  const installFromNpm = async () => {
+    const spec = npmSpec.trim()
+    if (!spec) return
+    setBusy('npm')
     try {
-      const { skill } = await installSkillFromNpmRequest(name)
-      store(skill, 'installed from npm')
-      setNpmName('')
+      const installed = await installNpm(spec)
+      setNpmSpec('')
+      notify(`Installed ${installed.join(', ')} from npm.`, 'success')
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : 'Could not install that npm package.', 'error')
     } finally {
-      setInstalling('')
+      setBusy(null)
     }
   }
 
-  const remove = async (skill: Skill) => {
+  const askRemove = async (skill: InstalledSkill) => {
     const confirmed = await askConfirm({
       title: 'Delete this skill?',
-      body: `“${skill.name}” and its files will be removed from this computer.`,
+      body: `“${skill.name}” and its folder will be removed from this computer.`,
       confirmLabel: 'Delete skill',
       tone: 'danger',
     })
-    if (confirmed) removeSkill(skill.id)
+    if (!confirmed) return
+    try {
+      await remove(skill.name)
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : 'Could not delete the skill.', 'error')
+    }
   }
 
   return (
     <SettingsSection
       title="Installed skills"
-      description={`${active} of ${settings.skills.length} enabled. The model sees each skill’s name and description, loads SKILL.md through the skill tool, and can run the scripts inside the skill folder.`}
+      description={`${active} of ${skills.length} enabled. The model sees each skill's name and description, then loads the full SKILL.md and bundled files on demand with the skill tool.`}
     >
-      <div className="mb-3 grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)]">
-        <button
-          type="button"
-          onClick={() => folderRef.current?.click()}
-          disabled={Boolean(installing)}
-          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-ink px-3 text-[10.5px] font-medium text-panel disabled:opacity-50"
-        >
-          {installing === 'folder' ? <Spinner size={11} /> : <Upload size={12} />}
-          Install folder
-        </button>
-        <input
-          ref={folderRef}
-          type="file"
-          className="hidden"
-          onChange={(event) => {
-            void installFolder(event.target.files)
-            event.target.value = ''
-          }}
-        />
-        <div className="flex gap-1.5">
-          <input
-            value={npmName}
-            onChange={(event) => setNpmName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void installNpm()
-            }}
-            placeholder="npm package, e.g. @scope/my-skill"
-            spellCheck={false}
-            className={cn(fieldClass, 'font-mono text-[10.5px]')}
-          />
+      <div className="mb-3 rounded-xl border border-line p-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => void installNpm()}
-            disabled={!npmName.trim() || Boolean(installing)}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-[10.5px] font-medium text-ink hover:bg-raised disabled:opacity-40"
+            onClick={() => folderRef.current?.click()}
+            disabled={busy !== null}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink px-2.5 text-[10.5px] font-medium text-panel disabled:opacity-50"
           >
-            {installing === 'npm' ? <Spinner size={11} /> : <ArrowDownToLine size={12} />}
-            Install
+            {busy === 'folder' ? <Spinner size={12} /> : <FolderUp size={12} />} Upload skill folder
           </button>
+          <input
+            ref={folderRef}
+            type="file"
+            className="hidden"
+            multiple
+            // @ts-expect-error webkitdirectory is a non-standard but widely supported attribute
+            webkitdirectory=""
+            directory=""
+            onChange={(event) => {
+              if (event.target.files) void uploadFolder(event.target.files)
+              event.target.value = ''
+            }}
+          />
+          <span className="text-[10px] text-faint">A folder with a SKILL.md, plus optional scripts/ and references/.</span>
         </div>
+        <form
+          className="mt-2.5 flex flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void installFromNpm()
+          }}
+        >
+          <div className="relative min-w-[220px] flex-1">
+            <Package size={12} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
+            <input
+              value={npmSpec}
+              onChange={(event) => setNpmSpec(event.target.value)}
+              placeholder="npm package, e.g. @scope/my-skills"
+              className={cn(fieldClass, 'pl-7 font-mono text-[11px]')}
+              aria-label="npm package"
+              spellCheck={false}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={busy !== null || !npmSpec.trim()}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-[10.5px] font-medium text-ink hover:bg-raised disabled:opacity-50"
+          >
+            {busy === 'npm' ? <Spinner size={12} /> : <Download size={12} />} Install from npm
+          </button>
+        </form>
+        <p className="mt-2 text-[9.5px] leading-relaxed text-faint">
+          npm installs run with scripts disabled; OpenSol only copies the SKILL.md folders the package ships. Skill scripts run
+          only when the model calls the shell tool, and that still asks for approval.
+        </p>
       </div>
-      <p className="mb-3 text-[9.5px] leading-relaxed text-faint">
-        A skill is a folder with a <span className="font-mono">SKILL.md</span> (name, description, instructions) plus any scripts it needs.
-        Folder uploads are read in your browser; npm packages come from the public registry through the local daemon.
-      </p>
 
-      {settings.skills.length === 0 ? (
+      {error && <p className="mb-2 text-[10.5px] text-danger">{error}</p>}
+
+      {skills.length === 0 ? (
         <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center">
-          <Sparkles size={17} className="mx-auto text-faint" />
-          <p className="mt-2 text-[11.5px] font-medium text-ink">No skills installed</p>
-          <p className="mt-1 text-[10px] text-muted">Install a skill folder or an npm package to give the agent new procedures and scripts.</p>
+          <Sparkles size={16} className="mx-auto text-faint" />
+          <p className="mt-2 text-[12px] font-medium text-ink">{loading ? 'Loading skills…' : 'No skills installed'}</p>
+          <p className="mt-1 text-[10.5px] text-muted">Upload a skill folder or install one from npm to give the agent new abilities.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-line">
-          {settings.skills.map((skill, index) => (
-            <div key={skill.id} className={cn('px-3 py-3', index !== 0 && 'border-t border-line')}>
+          {skills.map((skill, index) => (
+            <div key={skill.name} className={cn('px-3 py-3', index !== 0 && 'border-t border-line')}>
               <div className="flex items-start gap-2.5">
                 <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
                   <Sparkles size={11} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="text-[11.5px] font-medium text-ink">{skill.name}</p>
-                    <span className="rounded bg-raised px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wide text-faint">
-                      {skill.source ?? 'folder'}
-                    </span>
-                    {skill.version && <span className="font-mono text-[8.5px] text-faint">v{skill.version}</span>}
-                    <span className={cn('text-[8.5px]', skill.enabled ? 'text-success' : 'text-faint')}>
-                      {skill.enabled ? 'Enabled' : 'Off'}
+                    <p className="font-mono text-[11.5px] font-medium text-ink">{skill.name}</p>
+                    <span className="rounded bg-raised px-1.5 py-0.5 text-[8px] font-medium text-faint">{formatSkillSource(skill.source)}</span>
+                    <span className="text-[8.5px] text-faint">
+                      {skill.fileCount} file{skill.fileCount === 1 ? '' : 's'} · {formatBytes(skill.size)}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-[9.5px] leading-relaxed text-muted">{skill.description}</p>
-                  <p className="mt-0.5 truncate font-mono text-[8.5px] text-faint" title={skill.package || skill.id}>
-                    {skill.package || skill.id} · {Object.keys(skill.files ?? {}).length} files
+                  <p className="mt-0.5 text-[9.5px] leading-relaxed text-muted">{skill.description || 'No description.'}</p>
+                  <p className="mt-0.5 truncate font-mono text-[8.5px] text-faint" title={skill.path}>
+                    {skill.path}
                   </p>
-                  <details className="group/skill mt-1">
-                    <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[9px] font-medium text-faint hover:text-muted [&::-webkit-details-marker]:hidden">
-                      View SKILL.md
-                      <ChevronDown size={9} className="transition-transform group-open/skill:rotate-180" />
-                    </summary>
-                    <pre className="thin-scroll mt-1.5 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-raised/40 p-2 font-mono text-[9.5px] leading-relaxed text-muted">
-                      {skill.instructions}
-                    </pre>
-                  </details>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void remove(skill)}
+                    onClick={() => void askRemove(skill)}
                     className="icon-button h-7 w-7 hover:text-danger"
                     aria-label={`Delete ${skill.name}`}
                     title="Delete skill"
@@ -1139,7 +1179,7 @@ function SkillsTab() {
                   </button>
                   <Switch
                     checked={skill.enabled}
-                    onChange={(enabled) => updateSkill(skill.id, { enabled })}
+                    onChange={(enabled) => void setEnabled(skill.name, enabled)}
                     label={`Enable ${skill.name}`}
                   />
                 </div>
@@ -1979,17 +2019,15 @@ export function SettingsModal() {
             {TABS.map((item, index) => {
               const Icon = item.icon
               const active = tab === item.id
-              const disabled = item.id === 'plugins'
               return (
                 <button
                   key={item.id}
                   type="button"
-                  disabled={disabled}
-                  onClick={() => openSettings(item.id)}
-                  title={disabled ? 'Plugins are disabled for maintenance' : item.description}
+                  onClick={() => openSettings(item.id as typeof tab)}
+                  disabled={item.disabled}
+                  title={item.description}
                   className={cn(
-                    'group/tab relative mb-[2px] flex h-10 w-full items-center gap-3 rounded-2xl px-3 text-left text-[12.5px] transition-colors duration-200',
-                    disabled && 'cursor-not-allowed opacity-40',
+                    'group/tab relative mb-[2px] flex h-10 w-full items-center gap-3 rounded-2xl px-3 text-left text-[12.5px] transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-45',
                     active ? 'font-semibold text-ink' : 'text-muted hover:text-ink',
                   )}
                 >
@@ -1998,7 +2036,6 @@ export function SettingsModal() {
                   </span>
                   <Icon size={14} className={cn('transition-transform duration-300 group-hover/tab:scale-110', active ? 'text-accent' : 'text-faint')} />
                   {item.label}
-                  {disabled && <span className="ml-auto text-[8px] text-faint">off</span>}
                 </button>
               )
             })}
@@ -2016,9 +2053,10 @@ export function SettingsModal() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => openSettings(item.id)}
+                onClick={() => openSettings(item.id as typeof tab)}
+                disabled={item.disabled}
                 className={cn(
-                  'shrink-0 rounded-full px-3 py-1.5 text-[11px] font-medium transition-all duration-200',
+                  'shrink-0 rounded-full px-3 py-1.5 disabled:opacity-45 text-[11px] font-medium transition-all duration-200',
                   tab === item.id ? 'bg-ink text-panel' : 'bg-raised text-muted',
                 )}
               >
