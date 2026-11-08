@@ -99,6 +99,7 @@ export type BuiltinToolName =
   | 'read_url'
   | 'git'
   | 'subagent'
+  | 'skill'
 
 /** MCP tools are exposed to the model as mcp__<server>__<tool>. */
 export type McpToolName = `mcp__${string}`
@@ -119,6 +120,12 @@ export interface Skill {
   instructions: string
   enabled: boolean
   builtIn?: boolean
+  /** Where the skill came from. Folder skills keep their uploaded files. */
+  source?: 'folder' | 'npm'
+  package?: string
+  version?: string
+  /** Text files from the folder, keyed by relative path (SKILL.md included). */
+  files?: Record<string, string>
 }
 
 export interface AppSettings {
@@ -129,6 +136,8 @@ export interface AppSettings {
   temperature: number
   maxTokens: number
   systemPrompt: string
+  /** Per-workspace system prompt overrides, keyed by workspace root. */
+  workspacePrompts: Record<string, string>
   providers: Record<string, ProviderCredentials>
   searchProvider: SearchProvider
   tools: Record<BuiltinToolName, ToolSetting>
@@ -185,7 +194,7 @@ export interface AssistantMessage {
   toolCalls: ToolCall[]
   model?: string
   provider?: ProviderId
-  usage?: { input?: number; output?: number }
+  usage?: { input?: number; output?: number; cost?: number }
   error?: string
   stopped?: boolean
   durationMs?: number
@@ -227,6 +236,8 @@ export interface ChatSession {
   mode?: AgentMode
   /** Workspace folder the session was started in. */
   workspace?: string
+  /** Per-session system prompt. Empty means the workspace or shared prompt is used. */
+  systemPrompt?: string
   /** Who last set the title; only 'auto' titles may be replaced by the AI. */
   titleSource?: 'auto' | 'ai' | 'user'
 }
@@ -275,6 +286,8 @@ export interface McpServer {
 export interface Usage {
   input?: number
   output?: number
+  /** Cost/credits reported by the provider, when it reports one. */
+  cost?: number
 }
 
 export interface StreamHandlers {

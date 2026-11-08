@@ -1,6 +1,6 @@
 import { cn } from '../lib/utils'
 
-/** The OpenSol sun: a solid core with eight round-capped rays. Inherits `currentColor`. */
+/** The OpenSol aperture: a broken solar ring around a solid core. Inherits `currentColor`. */
 export function LogoMark({ size = 28, className, spin = false }: { size?: number; className?: string; spin?: boolean }) {
   return (
     <span
@@ -9,10 +9,16 @@ export function LogoMark({ size = 28, className, spin = false }: { size?: number
       aria-hidden="true"
     >
       <svg viewBox="0 0 32 32" width={size} height={size} fill="none" className={cn(spin && 'animate-spin-slow')}>
-        <circle cx="16" cy="16" r="6.2" fill="currentColor" />
-        <g stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-          <path d="M16 3.6v3.2M16 25.2v3.2M3.6 16h3.2M25.2 16h3.2" />
-          <path d="M7.2 7.2l2.2 2.2M22.6 22.6l2.2 2.2M7.2 24.8l2.2-2.2M22.6 9.4l2.2-2.2" opacity="0.55" />
+        <circle cx="16" cy="16" r="5.1" fill="currentColor" />
+        <circle cx="16" cy="16" r="8.4" stroke="currentColor" strokeWidth="0.9" opacity="0.22" />
+        <g stroke="currentColor" strokeWidth="2.15" strokeLinecap="round">
+          <path d="M16 4.4a11.6 11.6 0 0 1 9.7 5.5" />
+          <path d="M27.6 16a11.6 11.6 0 0 1-5.5 9.7" opacity="0.6" />
+          <path d="M16 27.6a11.6 11.6 0 0 1-9.7-5.5" opacity="0.32" />
+          <path d="M4.4 16a11.6 11.6 0 0 1 5.5-9.7" opacity="0.8" />
+        </g>
+        <g stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+          <path d="M16 1.5v2.2M30.5 16h-2.2M16 30.5v-2.2M1.5 16h2.2" opacity="0.9" />
         </g>
       </svg>
     </span>

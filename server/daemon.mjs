@@ -69,7 +69,8 @@ import {
   workspaceRoot,
   writeWorkspaceFile,
 } from './lib/tools.mjs'
-import { deployToolStatus, runDeploy } from './lib/deploy.mjs'
+import { deployToolStatus, inspectDeployProject, runDeploy } from './lib/deploy.mjs'
+import { installSkillFromNpm } from './lib/skills.mjs'
 import {
   getPluginArchive,
   installPlugin,
@@ -201,6 +202,8 @@ const TOOL_NAMES = new Set([
   'read_url',
   'git',
   'subagent',
+  'skill',
+  'skill_run',
 ])
 const SEARCH_PROVIDERS = new Set(['duckduckgo', 'tavily', 'brave', 'serper'])
 
@@ -220,6 +223,16 @@ function sanitizeSettings(patch, current = {}) {
     next.maxTokens = Math.max(256, Math.min(200_000, Math.round(source.maxTokens)))
   }
   if (typeof source.systemPrompt === 'string') next.systemPrompt = source.systemPrompt.slice(0, 60_000)
+  if (source.workspacePrompts && typeof source.workspacePrompts === 'object') {
+    const prompts = { ...(current.workspacePrompts ?? {}) }
+    for (const [root, value] of Object.entries(source.workspacePrompts)) {
+      if (!root.startsWith('/') || root.length > 4096) continue
+      if (typeof value !== 'string') continue
+      if (value.trim()) prompts[root] = value.slice(0, 60_000)
+      else delete prompts[root]
+    }
+    next.workspacePrompts = prompts
+  }
   if (typeof source.searchProvider === 'string' && SEARCH_PROVIDERS.has(source.searchProvider)) {
     next.searchProvider = source.searchProvider
   }
@@ -260,13 +273,24 @@ function sanitizeSettings(patch, current = {}) {
   if (Array.isArray(source.skills)) {
     next.skills = source.skills.slice(0, 60).map((skill) => {
       const item = skill && typeof skill === 'object' ? skill : {}
+      const files = {}
+      if (item.files && typeof item.files === 'object') {
+        for (const [path, content] of Object.entries(item.files).slice(0, 200)) {
+          if (typeof path === 'string' && typeof content === 'string' && path.length <= 300) {
+            files[path] = content.slice(0, 512 * 1024)
+          }
+        }
+      }
       return {
         id: typeof item.id === 'string' ? item.id.slice(0, 120) : `skill-${randomBytes(4).toString('hex')}`,
         name: sanitizeString(item.name, 120) ?? 'Skill',
         description: sanitizeString(item.description, 600) ?? '',
-        instructions: sanitizeString(item.instructions, 20_000) ?? '',
-        enabled: item.enabled === true,
-        builtIn: item.builtIn === true,
+        instructions: sanitizeString(item.instructions, 60_000) ?? '',
+        enabled: item.enabled !== false,
+        source: item.source === 'npm' ? 'npm' : item.source === 'folder' ? 'folder' : undefined,
+        package: sanitizeString(item.package, 200),
+        version: sanitizeString(item.version, 60),
+        files: Object.keys(files).length > 0 ? files : undefined,
       }
     })
   }
@@ -284,6 +308,7 @@ function sanitizeChats(payload) {
       ...raw,
       id: raw.id.slice(0, 120),
       title: typeof raw.title === 'string' ? raw.title.slice(0, 300) : 'Untitled',
+      systemPrompt: typeof raw.systemPrompt === 'string' ? raw.systemPrompt.slice(0, 60_000) : undefined,
       // Keep the newest messages: slicing from the start dropped the latest replies.
       messages: raw.messages.slice(-2000),
       updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now(),
@@ -777,8 +802,21 @@ async function route(req, res) {
       return
     }
 
+    if (pathname === '/api/deploy/inspect' && method === 'POST') {
+      const body = await readJson(req)
+      json(res, 200, await inspectDeployProject(String(body.path ?? '')))
+      return
+    }
+
     if (pathname === '/api/deploy' && method === 'POST') {
       await handleDeploy(req, res)
+      return
+    }
+
+    if (pathname === '/api/skills/install' && method === 'POST') {
+      const body = await readJson(req)
+      const skill = await installSkillFromNpm(String(body.package ?? ''))
+      json(res, 200, { skill })
       return
     }
 

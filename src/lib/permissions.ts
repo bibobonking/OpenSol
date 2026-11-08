@@ -21,7 +21,7 @@ export const PERMISSION_MODES: Array<{ value: PermissionMode; label: string; des
 ]
 
 const WRITE_TOOLS: BuiltinToolName[] = ['write_file', 'edit_file', 'rewrite_file']
-const GUARDED_TOOLS: BuiltinToolName[] = ['shell', 'git', 'subagent']
+const GUARDED_TOOLS: BuiltinToolName[] = ['shell', 'git', 'subagent', 'skill']
 
 export function permissionMode(tools: AppSettings['tools']): PermissionMode {
   const writesAuto = WRITE_TOOLS.every((tool) => tools[tool]?.approval === 'auto')

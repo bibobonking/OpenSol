@@ -12,6 +12,7 @@ import type {
   ProviderId,
   ProviderStatus,
   SecretsSummary,
+  Skill,
   WorkspaceFile,
   WorkspaceInfo,
 } from '../types'
@@ -263,6 +264,10 @@ export function setDeployCredentials(provider: DeployProviderId, fields: Record<
   })
 }
 
+export function installSkillFromNpmRequest(packageName: string) {
+  return api<{ skill: Skill }>('/api/skills/install', { method: 'POST', body: JSON.stringify({ package: packageName }) })
+}
+
 export function resetScope(scope: 'history' | 'secrets' | 'settings' | 'all'): Promise<DaemonSnapshot> {
   return api('/api/reset', jsonBody({ scope }))
 }
@@ -450,6 +455,20 @@ export async function requestLLM(
   }
   if (!response.ok) throw await parseError(response)
   return response
+}
+
+export interface DeployInspection {
+  path: string
+  name: string
+  hasPackageJson: boolean
+  framework: string
+  buildCommand: string
+  outputDir: string
+  existingOutputs: string[]
+}
+
+export function inspectDeploy(path: string): Promise<DeployInspection> {
+  return api('/api/deploy/inspect', { method: 'POST', body: JSON.stringify({ path }) })
 }
 
 export async function* streamDeploy(

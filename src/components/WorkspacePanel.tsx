@@ -28,6 +28,7 @@ import { useWorkspace } from '../store/workspace'
 import { PreviewPane } from './PreviewPane'
 import { SessionsTab } from './SessionsTab'
 import { useChats } from '../store/chats'
+import { FileIcon } from './FileIcon'
 import { Spinner } from './ui'
 
 interface TreeNode {
@@ -333,11 +334,7 @@ export function WorkspacePanel() {
             title={path}
           >
             <ChevronRight size={10} className={cn('shrink-0 text-faint transition-transform', !closed && 'rotate-90')} />
-            {closed ? (
-              <Folder size={12} className="shrink-0 text-faint" />
-            ) : (
-              <FolderOpen size={12} className="shrink-0 text-faint" />
-            )}
+            <FileIcon path={path} type="dir" open={!closed} size={13} />
             <span className="min-w-0 flex-1 truncate">{node.entry.name}</span>
             <span
               role="button"
@@ -365,14 +362,19 @@ export function WorkspacePanel() {
         type="button"
         onClick={() => setActiveFile(path)}
         className={cn(
-          'flex h-7 w-full items-center gap-1.5 rounded-md pr-1.5 text-left font-mono text-[10.5px] transition-colors',
+          'group flex h-7 w-full items-center gap-1.5 rounded-md pr-1.5 text-left font-mono text-[10.5px] transition-colors',
           activeFile === path ? 'bg-accent-soft font-medium text-accent' : 'text-muted hover:bg-raised hover:text-ink',
         )}
         style={{ paddingLeft: 8 + depth * 13 + 10 }}
         title={path}
       >
-        <FileText size={11} className={cn('shrink-0', activeFile === path ? 'text-accent' : 'text-faint')} />
+        <FileIcon path={path} size={12} className={cn(activeFile === path && 'text-accent')} />
         <span className="min-w-0 flex-1 truncate">{node.entry.name}</span>
+        {node.entry.size > 0 && (
+          <span className="shrink-0 text-[8.5px] tabular-nums text-faint/70 opacity-0 transition-opacity group-hover:opacity-100">
+            {formatBytes(node.entry.size)}
+          </span>
+        )}
       </button>
     )
   }
@@ -562,7 +564,7 @@ export function WorkspacePanel() {
                               : 'text-muted hover:bg-raised hover:text-ink',
                           )}
                         >
-                          {entry.type === 'dir' ? <Folder size={11} /> : <FileText size={11} />}
+                          {entry.type === 'dir' ? <FileIcon path={entry.path} type="dir" size={12} /> : <FileIcon path={entry.path} size={12} />}
                           <span className="truncate">{entry.path}</span>
                         </button>
                       ))

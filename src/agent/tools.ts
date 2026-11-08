@@ -519,6 +519,7 @@ export function toolLabel(name: ToolName): string {
     read_url: 'Read URL',
     git: 'Git',
     subagent: 'Subagent',
+    skill: 'Skill',
   }
   return labels[name as BuiltinToolName] ?? 'Tool'
 }

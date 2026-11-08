@@ -2,6 +2,7 @@ import {
   FolderOpen,
   ListChecks,
   Menu,
+  MessageSquareCode,
   Moon,
   PanelLeftOpen,
   Rocket,
@@ -19,6 +20,8 @@ import { cn } from '../lib/utils'
 import { themeIsDark } from '../lib/themes'
 import { LogoMark } from './Logo'
 import { ContextBar } from './ContextBar'
+import { SystemPromptModal } from './SystemPromptModal'
+import { useState } from 'react'
 
 export type ChatViewMode = 'chat' | 'trajectory'
 
@@ -44,7 +47,11 @@ export function TopBar({
   const setWorkspaceOpen = useUi((state) => state.setWorkspaceOpen)
   const setDeployOpen = useUi((state) => state.setDeployOpen)
   const workspace = useWorkspace((state) => state.info)
+  const workspaceRoot = useWorkspace((state) => state.root)
   const activeModel = useActiveModel()
+  const [promptOpen, setPromptOpen] = useState(false)
+  const root = session?.workspace || workspaceRoot || ''
+  const promptIsCustom = Boolean(session?.systemPrompt?.trim() || (root && settings.workspacePrompts[root]?.trim()))
 
   // Go through the theme registry so Night Owl, Claude Code, Solar and plugin themes count as dark.
   const isDark = themeIsDark(
@@ -128,6 +135,17 @@ export function TopBar({
         )}
         <button
           type="button"
+          className={cn('icon-button relative hidden sm:inline-flex', promptIsCustom && 'text-accent')}
+          onClick={() => setPromptOpen(true)}
+          disabled={!session}
+          title={promptIsCustom ? 'Custom system prompt for this session or workspace' : 'Edit the system prompt for this session'}
+          aria-label="Edit system prompt"
+        >
+          <MessageSquareCode size={16} />
+          {promptIsCustom && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent" />}
+        </button>
+        <button
+          type="button"
           onClick={() => setWorkspaceOpen(!workspaceOpen)}
           title={workspace.available ? workspace.root : 'Choose a workspace folder'}
           className={cn(
@@ -177,6 +195,7 @@ export function TopBar({
           <Settings size={16} />
         </button>
       </div>
+      <SystemPromptModal session={session} open={promptOpen} onClose={() => setPromptOpen(false)} />
     </header>
   )
 }

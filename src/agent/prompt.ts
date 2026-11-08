@@ -36,13 +36,10 @@ export function buildSystemPrompt(settings: AppSettings, mode: AgentMode = setti
   if (skills.length > 0) {
     chunks.push(
       [
-        '## Loaded skills',
-        'Apply these skills when the task matches their purpose. They refine the working rules above; they never override safety, tool permissions or plan mode.',
-        ...skills.map(
-          (skill) =>
-            `<skill name="${skill.name}">\nPurpose: ${skill.description}\n${skill.instructions.trim()}\n</skill>`,
-        ),
-      ].join('\n\n'),
+        '## Available skills',
+        'Call the `skill` tool to load the full instructions (and run scripts from the skill folder) when a task matches one of these. Do not guess a skill’s contents.',
+        ...skills.map((skill) => `- ${skill.name} (${skill.id}): ${skill.description}`),
+      ].join('\n'),
     )
   }
 

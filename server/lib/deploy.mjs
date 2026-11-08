@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { realpath, stat } from 'node:fs/promises'
+import { readFile, realpath, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { HttpError } from './http.mjs'
@@ -13,7 +13,7 @@ const CLIS = {
   cloudflare: { bin: 'wrangler', pkg: 'wrangler@latest', label: 'Wrangler' },
 }
 
-function slugify(value, fallback = 'maxcode-site') {
+function slugify(value, fallback = 'opensol-site') {
   const slug = String(value ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
@@ -171,8 +171,66 @@ async function fetchJson(url, options = {}) {
 
 function firstUrl(text) {
   const matches = text.match(/https:\/\/[^\s"'<>)\]]+/g) ?? []
-  const filtered = matches.filter((url) => !/vercel\.com\/(docs|cli|pricing)/i.test(url))
+  const filtered = matches.filter(
+    (url) =>
+      !/vercel\.com\/(docs|cli|pricing)/i.test(url) &&
+      !/netlify\.com\/(docs|pricing|app)/i.test(url) &&
+      !/developers\.cloudflare\.com/i.test(url) &&
+      !/wrangler/i.test(url) &&
+      !/github\.com/i.test(url),
+  )
   return filtered[filtered.length - 1] ?? ''
+}
+
+const OUTPUT_CANDIDATES = ['dist', 'build', 'out', '.output/public', 'public']
+const FRAMEWORKS = [
+  { dep: 'next', name: 'Next.js', output: 'out' },
+  { dep: 'nuxt', name: 'Nuxt', output: '.output/public' },
+  { dep: 'astro', name: 'Astro', output: 'dist' },
+  { dep: '@sveltejs/kit', name: 'SvelteKit', output: 'build' },
+  { dep: 'vite', name: 'Vite', output: 'dist' },
+  { dep: 'react-scripts', name: 'Create React App', output: 'build' },
+]
+
+async function packageManager(root) {
+  for (const [file, command] of [
+    ['pnpm-lock.yaml', 'pnpm'],
+    ['yarn.lock', 'yarn'],
+    ['bun.lockb', 'bun'],
+    ['bun.lock', 'bun'],
+    ['package-lock.json', 'npm'],
+  ]) {
+    if (await stat(path.join(root, file)).catch(() => null)) return command
+  }
+  return 'npm'
+}
+
+/** Read package.json and existing build output so the panel can fill the form correctly. */
+export async function inspectDeployProject(rawPath) {
+  const absolute = await resolveDeployPath(rawPath)
+  await ensureDir(absolute)
+  const pkg = await readFile(path.join(absolute, 'package.json'), 'utf8')
+    .then((text) => JSON.parse(text))
+    .catch(() => null)
+  const deps = { ...(pkg?.dependencies ?? {}), ...(pkg?.devDependencies ?? {}) }
+  const framework = FRAMEWORKS.find((entry) => deps[entry.dep])
+  const found = []
+  for (const candidate of OUTPUT_CANDIDATES) {
+    const info = await stat(path.join(absolute, candidate)).catch(() => null)
+    if (info?.isDirectory()) found.push(candidate)
+  }
+  const manager = await packageManager(absolute)
+  const script = typeof pkg?.scripts?.build === 'string' ? pkg.scripts.build : ''
+  const buildCommand = script ? (manager === 'npm' ? 'npm run build' : `${manager} build`) : ''
+  return {
+    path: absolute,
+    name: slugify(path.basename(absolute), ''),
+    hasPackageJson: Boolean(pkg),
+    framework: framework?.name ?? (pkg ? 'Node project' : 'Static folder'),
+    buildCommand,
+    outputDir: found[0] ?? framework?.output ?? '',
+    existingOutputs: found,
+  }
 }
 
 async function resolveCli(provider) {
@@ -208,9 +266,16 @@ async function buildIfNeeded(cwd, buildCommand, onLog, signal) {
   }
 }
 
-function outputDirFor(cwd, outputDir) {
+async function outputDirFor(cwd, outputDir) {
   const clean = typeof outputDir === 'string' ? outputDir.trim() : ''
-  if (!clean) return cwd
+  if (!clean || clean === 'auto') {
+    // With no explicit choice, use a real build folder if one exists instead of dumping the whole project.
+    for (const candidate of OUTPUT_CANDIDATES) {
+      const found = await stat(path.join(cwd, candidate)).catch(() => null)
+      if (found?.isDirectory()) return path.join(cwd, candidate)
+    }
+    return cwd
+  }
   const resolved = path.resolve(cwd, clean)
   if (!resolved.startsWith(cwd.endsWith(path.sep) ? cwd : `${cwd}${path.sep}`) && resolved !== cwd) {
     throw new HttpError(400, 'The output folder must stay inside the deploy folder.', 'bad_output')
@@ -220,7 +285,13 @@ function outputDirFor(cwd, outputDir) {
 
 async function ensureDir(target) {
   const info = await stat(target).catch(() => null)
-  if (!info?.isDirectory()) throw new HttpError(400, 'The folder to deploy does not exist.', 'bad_deploy_path')
+  if (!info?.isDirectory()) {
+    throw new HttpError(
+      400,
+      `The folder "${path.basename(target)}" does not exist. Run a build command or choose the folder that actually contains the site.`,
+      'bad_deploy_path',
+    )
+  }
 }
 
 /**
@@ -418,7 +489,7 @@ export async function runDeploy(input, { onLog = () => undefined, signal } = {})
   }
   const absolute = await resolveDeployPath(input?.path)
   await ensureDir(absolute)
-  const targetDir = outputDirFor(absolute, input?.outputDir)
+  const targetDir = await outputDirFor(absolute, input?.outputDir)
   await buildIfNeeded(absolute, input?.buildCommand, onLog, signal)
   await ensureDir(targetDir)
 

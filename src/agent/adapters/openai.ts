@@ -95,6 +95,10 @@ export async function streamOpenAI(request: AdapterRequest): Promise<AdapterResu
   if (settings.provider === 'openai' || settings.provider === 'openrouter') {
     body.stream_options = { include_usage: true }
   }
+  if (settings.provider === 'openrouter') {
+    // Ask OpenRouter to include the credit cost in the final usage chunk.
+    body.usage = { include: true }
+  }
   if (usesCompletionTokens(settings.provider, modelId)) {
     body.max_completion_tokens = settings.maxTokens
   } else {
@@ -134,8 +138,17 @@ export async function streamOpenAI(request: AdapterRequest): Promise<AdapterResu
     }
 
     if (payload.usage && typeof payload.usage === 'object') {
-      const value = payload.usage as { prompt_tokens?: number; completion_tokens?: number }
-      usage = { input: value.prompt_tokens, output: value.completion_tokens }
+      const value = payload.usage as {
+        prompt_tokens?: number
+        completion_tokens?: number
+        cost?: number
+        total_cost?: number
+      }
+      usage = {
+        input: value.prompt_tokens,
+        output: value.completion_tokens,
+        cost: typeof value.cost === 'number' ? value.cost : typeof value.total_cost === 'number' ? value.total_cost : undefined,
+      }
       handlers.onUsage(usage)
     }
 

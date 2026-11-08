@@ -43,28 +43,30 @@ export class SystemPromptService extends Service {
     return () => this.customSections.delete(name)
   }
 
-  assemble(settings: AppSettings, mode: AgentMode = settings.mode): string {
+  assemble(
+    settings: AppSettings,
+    mode: AgentMode = settings.mode,
+    overrides: { sessionPrompt?: string; workspacePrompt?: string } = {},
+  ): string {
     const sections: PromptSection[] = []
 
-    // 1. Base instruction
-    if (settings.systemPrompt?.trim()) {
-      sections.push({ name: 'base', priority: 10, content: settings.systemPrompt.trim() })
+    // 1. Base instruction: session override, then workspace override, then the shared prompt.
+    const base = overrides.sessionPrompt?.trim() || overrides.workspacePrompt?.trim() || settings.systemPrompt?.trim()
+    if (base) {
+      sections.push({ name: 'base', priority: 10, content: base })
     }
 
-    // 2. Loaded skills
-    const skills = settings.skills.filter((skill) => skill.enabled)
+    // 2. Skills are discovered, not pasted: the model loads one through the skill tool.
+    const skills = settings.tools.skill?.enabled === false ? [] : settings.skills.filter((skill) => skill.enabled)
     if (skills.length > 0) {
       sections.push({
         name: 'skills',
         priority: 20,
         content: [
-          '## Loaded skills',
-          'Apply these skills when the task matches their purpose. They refine the working rules above; they never override safety, tool permissions or plan mode.',
-          ...skills.map(
-            (skill) =>
-              `<skill name="${skill.name}">\nPurpose: ${skill.description}\n${skill.instructions.trim()}\n</skill>`,
-          ),
-        ].join('\n\n'),
+          '## Available skills',
+          'Call the `skill` tool to load the full instructions (and run scripts from the skill folder) when a task matches one of these. Do not guess a skill’s contents.',
+          ...skills.map((skill) => `- ${skill.name} (${skill.id}): ${skill.description}`),
+        ].join('\n'),
       })
     }
 

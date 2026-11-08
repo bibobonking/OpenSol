@@ -178,6 +178,8 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
   const [manual, setManual] = useState('')
   const [showManual, setShowManual] = useState(false)
   const [cursor, setCursor] = useState(0)
+  /** Only keyboard moves scroll the list; scrolling on hover fights the pointer and jitters. */
+  const keyboardCursor = useRef(true)
   const listRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -226,11 +228,13 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
   }, [models, query])
 
   useLayoutEffect(() => {
+    keyboardCursor.current = true
     setCursor(0)
   }, [query, provider])
 
   useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(`[data-row="${cursor}"]`)?.scrollIntoView({ block: 'center' })
+    if (!keyboardCursor.current) return
+    listRef.current?.querySelector<HTMLElement>(`[data-row="${cursor}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [cursor])
 
   const choose = (model: ModelInfo) => {
@@ -258,9 +262,11 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
   const onSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
+      keyboardCursor.current = true
       setCursor((value) => Math.min(filtered.length - 1, value + 1))
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
+      keyboardCursor.current = true
       setCursor((value) => Math.max(0, value - 1))
     } else if (event.key === 'Enter') {
       event.preventDefault()
@@ -472,7 +478,11 @@ export function ModelDeck({ open, onClose }: { open: boolean; onClose: () => voi
                           setCursor(i)
                           choose(model)
                         }}
-                        onMouseMove={() => highlighted || setCursor(i)}
+                        onMouseEnter={() => {
+                          if (highlighted) return
+                          keyboardCursor.current = false
+                          setCursor(i)
+                        }}
                         style={{ animationDelay: `${Math.min(i * 22, 260)}ms` }}
                         className={cn(
                           'deck-row group/row relative mb-1 flex w-full items-center gap-3 overflow-hidden rounded-2xl px-3 py-2.5 text-left transition-colors',

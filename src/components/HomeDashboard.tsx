@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Activity, CalendarDays, Clock3, Cpu, MessageSquare, Sparkles } from 'lucide-react'
+import { Activity, CalendarDays, Clock3, Cpu, CreditCard, MessageSquare, Sparkles } from 'lucide-react'
 import { useChats } from '../store/chats'
 import { useSettings } from '../store/settings'
 import { useWorkspace } from '../store/workspace'
 import { cn } from '../lib/utils'
-import { computeUsage, formatTokens, shortModelName, type UsageRange } from '../lib/usage'
+import { computeUsage, formatCredits, formatTokens, shortModelName, type UsageRange } from '../lib/usage'
 import { PixleSol } from './PixleSol'
 
 const RANGES: Array<{ value: UsageRange; label: string }> = [
@@ -118,6 +118,7 @@ export function HomeDashboard() {
               <Stat icon={Activity} label="Sessions" value={String(stats.sessions)} />
               <Stat icon={MessageSquare} label="Messages" value={String(stats.messages)} />
               <Stat icon={Sparkles} label="Total tokens" value={stats.tokens ? formatTokens(stats.tokens) : '0'} />
+              <Stat icon={CreditCard} label="Credits spent" value={formatCredits(stats.credits)} />
               <Stat icon={CalendarDays} label="Active days" value={String(stats.activeDays)} />
               <Stat icon={Clock3} label="Peak hour" value={stats.peakHour} />
               <Stat icon={Cpu} label="Favorite model" value={shortModelName(stats.favoriteModel)} />
@@ -143,6 +144,12 @@ export function HomeDashboard() {
               {stats.messages === 0
                 ? 'No activity in this range yet. Send a message to start the graph.'
                 : `You've used ~${formatTokens(stats.tokens)} tokens across ${stats.messages} messages.`}
+              {stats.credits > 0 && (
+                <>
+                  <span className="px-1.5 text-line">·</span>
+                  {formatCredits(stats.credits)} in provider credits
+                </>
+              )}
               {stats.favoriteModel !== '—' && (
                 <>
                   <span className="px-1.5 text-line">·</span>

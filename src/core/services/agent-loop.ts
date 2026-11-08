@@ -4,6 +4,7 @@ import { activeModelId, useSettings } from '../../store/settings'
 import { createId } from '../../store/chats'
 import { findModel } from '../../store/models'
 import { useRuntime } from '../../store/ui'
+import { useWorkspace } from '../../store/workspace'
 import { getProviderName } from '../../data/providers'
 import { describeRequestError } from '../../lib/sse'
 import type { AdapterResult } from '../../agent/adapters/shared'
@@ -11,7 +12,6 @@ import { createTurnQueue, lastUserMessageId } from '../../agent/queue'
 import { resolveToolSetting } from '../mcp-tools'
 import type { StepContext, StepResult, TurnResult } from '../types'
 
-const MAX_ROUNDS = 16
 const MAX_RETRIES = 2
 /** Provider hiccups worth another try: overload, rate limits, 5xx and dropped connections. */
 const RETRYABLE = /\b(429|500|502|503|504|529)\b|rate.?limit|overloaded|temporar|timed out|could not be reached|lost the connection|failed to fetch|networkerror/i
@@ -112,7 +112,8 @@ export class AgentLoopService extends Service {
     let turnError: string | undefined
 
     try {
-      rounds: for (let round = 0; round < MAX_ROUNDS; round += 1) {
+      // No round cap: the turn ends when the model stops calling tools or the user stops it.
+      rounds: for (let round = 0; ; round += 1) {
         totalRounds = round + 1
         if (controller.signal.aborted) break
         let current = this.ctx.sessions.current(sessionId)
@@ -188,7 +189,12 @@ export class AgentLoopService extends Service {
               settings,
               model: findModel(settings.provider, activeModelId(settings)),
               history,
-              system: this.ctx.systemPrompt.assemble(settings, mode),
+              system: this.ctx.systemPrompt.assemble(settings, mode, {
+                sessionPrompt: current.systemPrompt,
+                workspacePrompt: current.workspace
+                  ? settings.workspacePrompts[current.workspace]
+                  : settings.workspacePrompts[useWorkspace.getState().root ?? ''],
+              }),
               mode,
               signal: controller.signal,
               handlers: {
@@ -250,7 +256,7 @@ export class AgentLoopService extends Service {
           reasoning: result.reasoning,
           thinkingBlocks: result.thinkingBlocks,
           toolCalls: result.toolCalls,
-          usage: usage.input || usage.output ? usage : result.usage,
+          usage: usage.input || usage.output || usage.cost ? usage : result.usage,
           durationMs: Date.now() - startedAt,
           stopped: controller.signal.aborted || undefined,
         })
@@ -382,24 +388,6 @@ export class AgentLoopService extends Service {
             }
           }
           break
-        }
-      }
-
-      const finalSession = this.ctx.sessions.current(sessionId)
-      if (!controller.signal.aborted && finalSession) {
-        const last = finalSession.messages[finalSession.messages.length - 1]
-        if (last?.role === 'tool') {
-          const message: AssistantMessage = {
-            id: createId('msg'),
-            role: 'assistant',
-            content: '',
-            reasoning: '',
-            toolCalls: [],
-            round: MAX_ROUNDS,
-            createdAt: Date.now(),
-            error: `Stopped after ${MAX_ROUNDS} tool rounds. Send another message to continue.`,
-          }
-          this.ctx.sessions.addMessage(sessionId, message)
         }
       }
     } finally {

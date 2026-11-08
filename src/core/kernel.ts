@@ -17,6 +17,7 @@ import * as toolGrep from './plugins/tools/grep'
 import * as toolGit from './plugins/tools/git'
 import * as toolWeb from './plugins/tools/web'
 import * as toolSubagent from './plugins/tools/subagent'
+import * as toolSkill from './plugins/tools/skill'
 
 export function createAppKernel(): Context {
   const ctx = new Context()
@@ -40,6 +41,7 @@ export function createAppKernel(): Context {
   ctx.plugin(toolGit)
   ctx.plugin(toolWeb)
   ctx.plugin(toolSubagent)
+  ctx.plugin(toolSkill)
 
   return ctx
 }

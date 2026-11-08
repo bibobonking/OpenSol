@@ -13,7 +13,6 @@ import type {
   BuiltinToolName,
   ToolSetting,
 } from '../types'
-import { BUILTIN_SKILLS } from '../data/skills'
 import { PROVIDER_MAP } from '../data/providers'
 import {
   patchSettings,
@@ -59,6 +58,7 @@ const DEFAULT_TOOLS: Record<BuiltinToolName, ToolSetting> = {
   read_url: { enabled: true, approval: 'auto' },
   git: { enabled: true, approval: 'ask' },
   subagent: { enabled: true, approval: 'ask' },
+  skill: { enabled: true, approval: 'ask' },
 }
 
 const DEFAULTS: AppSettings = {
@@ -69,10 +69,11 @@ const DEFAULTS: AppSettings = {
   temperature: 0.4,
   maxTokens: 8192,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  workspacePrompts: {},
   providers: {},
   searchProvider: 'duckduckgo',
   tools: DEFAULT_TOOLS,
-  skills: BUILTIN_SKILLS,
+  skills: [],
   theme: 'system',
   showTokenEstimate: true,
   mode: 'build',
@@ -122,13 +123,15 @@ function mergeTools(saved?: Partial<Record<BuiltinToolName, Partial<ToolSetting>
 }
 
 function mergeSkills(saved?: Skill[]) {
-  const byId = new Map<string, Skill>()
-  for (const skill of BUILTIN_SKILLS) byId.set(skill.id, skill)
-  for (const skill of saved ?? []) {
-    if (!skill || typeof skill.id !== 'string') continue
-    byId.set(skill.id, { ...(byId.get(skill.id) ?? {}), ...skill, builtIn: skill.builtIn ?? byId.has(skill.id) })
-  }
-  return [...byId.values()]
+  // Built-in skills were removed; drop any leftovers persisted by older versions.
+  return (saved ?? [])
+    .filter((skill): skill is Skill => Boolean(skill) && typeof skill.id === 'string' && typeof skill.name === 'string' && !skill.builtIn)
+    .map((skill) => ({
+      ...skill,
+      description: typeof skill.description === 'string' ? skill.description : '',
+      instructions: typeof skill.instructions === 'string' ? skill.instructions : '',
+      enabled: skill.enabled !== false,
+    }))
 }
 
 function upgradePrompt(value: unknown) {
@@ -178,6 +181,14 @@ function buildSettings(persisted?: Partial<AppSettings>): AppSettings {
         ? Math.max(256, Math.min(200_000, Math.round(saved.maxTokens)))
         : DEFAULTS.maxTokens,
     systemPrompt: upgradePrompt(saved.systemPrompt),
+    workspacePrompts:
+      saved.workspacePrompts && typeof saved.workspacePrompts === 'object'
+        ? Object.fromEntries(
+            Object.entries(saved.workspacePrompts).filter(
+              ([key, value]) => key.startsWith('/') && typeof value === 'string',
+            ),
+          )
+        : {},
     providers: sanitizeBaseUrls(saved.providers),
     searchProvider:
       saved.searchProvider && ['duckduckgo', 'tavily', 'brave', 'serper'].includes(saved.searchProvider)
@@ -211,6 +222,7 @@ function persistedPatch(patch: Partial<AppSettings>): Partial<AppSettings> {
     'temperature',
     'maxTokens',
     'systemPrompt',
+    'workspacePrompts',
     'providers',
     'searchProvider',
     'tools',

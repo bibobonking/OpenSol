@@ -18,6 +18,7 @@ export interface UsageStats {
   sessions: number
   messages: number
   tokens: number
+  credits: number
   activeDays: number
   peakHour: string
   favoriteModel: string
@@ -81,6 +82,7 @@ export function computeUsage(sessions: ChatSession[], range: UsageRange, now = D
   const days = new Map<string, HeatmapDay>()
   const models = new Map<string, ModelUsage>()
   let tokens = 0
+  let credits = 0
 
   for (const { message, session } of messages) {
     const at = messageTime(message, session.updatedAt)
@@ -93,6 +95,9 @@ export function computeUsage(sessions: ChatSession[], range: UsageRange, now = D
     if (message.role !== 'assistant') continue
     const messageTokens = estimateTokens(message)
     tokens += messageTokens
+    if (typeof message.usage?.cost === 'number' && Number.isFinite(message.usage.cost)) {
+      credits += Math.max(0, message.usage.cost)
+    }
     const model = typeof message.model === 'string' ? message.model.trim() : ''
     if (!model) continue
     const entry = models.get(model) ?? { model, messages: 0, tokens: 0 }
@@ -119,6 +124,7 @@ export function computeUsage(sessions: ChatSession[], range: UsageRange, now = D
     sessions: filteredSessions.length,
     messages: messages.length,
     tokens,
+    credits,
     activeDays: days.size,
     peakHour: messages.length ? hourLabel(peak) : '—',
     favoriteModel: favorite?.model ?? '—',
@@ -146,6 +152,12 @@ export function formatTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
   if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`
   return String(value)
+}
+
+export function formatCredits(value: number): string {
+  if (!value) return '—'
+  if (value < 0.01) return `$${value.toFixed(4)}`
+  return `$${value.toFixed(2)}`
 }
 
 export function shortModelName(model: string): string {

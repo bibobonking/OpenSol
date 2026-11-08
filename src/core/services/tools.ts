@@ -15,6 +15,7 @@ const READ_ONLY_TOOLS = new Set<ToolName>([
   'grep',
   'web_search',
   'read_url',
+  'skill',
 ])
 
 export function toolAllowedInMode(name: ToolName, mode: AgentMode): boolean {

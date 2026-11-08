@@ -23,7 +23,6 @@ import {
   Moon,
   Package,
   Palette,
-  Plus,
   RefreshCw,
   Rocket,
   RotateCcw,
@@ -42,7 +41,6 @@ import {
 import type { DeployProviderId, Effort, ModelInfo, ProviderId, SearchProvider, Skill, BuiltinToolName } from '../types'
 import type { LucideIcon } from 'lucide-react'
 import { EFFORT_LABELS, PROVIDERS, PROVIDER_MAP } from '../data/providers'
-import { STARTER_SKILL } from '../data/skills'
 import {
   DEFAULT_SYSTEM_PROMPT,
   activeModelId,
@@ -55,10 +53,11 @@ import { useChats, exportChats, importChats } from '../store/chats'
 import { useWorkspace } from '../store/workspace'
 import { stopAllRuns } from '../agent'
 import { applySnapshot } from '../lib/boot'
-import { executeDaemonTool, resetScope } from '../lib/daemon'
+import { executeDaemonTool, installSkillFromNpmRequest, resetScope } from '../lib/daemon'
+import { skillFromFolder } from '../lib/skills'
 import { effortOptions, reasoningSummary } from '../lib/reasoning'
 import { PERMISSION_MODES, permissionMode, permissionTools } from '../lib/permissions'
-import { cn, formatBytes, readFileAsText } from '../lib/utils'
+import { cn, formatBytes } from '../lib/utils'
 import { LogoMark } from './Logo'
 import { PluginManager } from './PluginManager'
 import { useMcp } from '../store/mcp'
@@ -70,7 +69,7 @@ const TABS = [
   { id: 'models', label: 'Models', icon: Cpu, description: 'Providers, encrypted keys, live models and reasoning defaults.' },
   { id: 'tools', label: 'Tools', icon: Wrench, description: 'What OpenSol can do on this machine, and when it must ask.' },
   { id: 'search', label: 'Search', icon: Globe2, description: 'Give the agent current web results with your own key.' },
-  { id: 'skills', label: 'Skills', icon: Sparkles, description: 'Instructions added to every request when enabled.' },
+  { id: 'skills', label: 'Skills', icon: Sparkles, description: 'Install skill folders or npm packages. The skill tool loads SKILL.md and runs the scripts a skill ships.' },
   { id: 'plugins', label: 'Plugins', icon: Package, description: 'Install local plugin packages, review what they ask for, and run them once you trust the code.' },
   { id: 'mcp', label: 'MCP', icon: Link2, description: 'Model Context Protocol servers now have their own panel, with OAuth sign-in and local, HTTP and SSE connections.' },
   { id: 'deploy', label: 'Deploy', icon: Rocket, description: 'Hosting credentials and command-line tools.' },
@@ -631,7 +630,7 @@ function ModelsTab() {
                 className="thin-scroll w-full resize-y rounded-lg border border-line bg-panel px-2.5 py-2 font-mono text-[10.5px] leading-relaxed text-ink outline-none focus:border-accent/50"
               />
               <p className="mt-1 text-[9px] leading-relaxed text-faint">
-                Enabled skill instructions and the current workspace/git context are appended after this prompt.
+                This is the shared prompt. Each session and workspace can override it from the prompt button in the chat header.
               </p>
             </div>
           </div>
@@ -647,7 +646,7 @@ const TOOL_ORDER: Array<{ title: string; tools: BuiltinToolName[] }> = [
     tools: ['read_file', 'list_files', 'grep', 'write_file', 'edit_file', 'rewrite_file', 'shell', 'git'],
   },
   { title: 'Web', tools: ['web_search', 'read_url'] },
-  { title: 'Delegation', tools: ['subagent'] },
+  { title: 'Delegation', tools: ['subagent', 'skill'] },
 ]
 
 const TOOL_ICONS: Record<BuiltinToolName, LucideIcon> = {
@@ -662,6 +661,7 @@ const TOOL_ICONS: Record<BuiltinToolName, LucideIcon> = {
   read_url: Link2,
   git: GitBranch,
   subagent: Bot,
+  skill: Sparkles,
 }
 
 const TOOL_COPY: Record<BuiltinToolName, { label: string; description: string }> = {
@@ -676,6 +676,7 @@ const TOOL_COPY: Record<BuiltinToolName, { label: string; description: string }>
   read_url: { label: 'Read URL', description: 'Open a public http(s) page as plain text.' },
   git: { label: 'Git', description: 'Inspect or change repository state. Plan mode is read-only.' },
   subagent: { label: 'Subagent', description: 'Delegate a read-only investigation and return a concise report.' },
+  skill: { label: 'Skill', description: 'List installed skills, load SKILL.md, and run commands inside a skill folder.' },
 }
 
 function ToolsTab() {
@@ -971,17 +972,6 @@ function SearchTab() {
   )
 }
 
-interface SkillDraft {
-  id?: string
-  name: string
-  description: string
-  instructions: string
-}
-
-function newSkillId() {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? `skill_${crypto.randomUUID()}` : `skill_${Date.now()}`
-}
-
 function SkillsTab() {
   const settings = useSettings()
   const addSkill = useSettings((state) => state.addSkill)
@@ -989,63 +979,58 @@ function SkillsTab() {
   const removeSkill = useSettings((state) => state.removeSkill)
   const askConfirm = useUi((state) => state.askConfirm)
   const notify = useUi((state) => state.notify)
-  const [draft, setDraft] = useState<SkillDraft | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [installing, setInstalling] = useState('')
+  const [npmName, setNpmName] = useState('')
+  const folderRef = useRef<HTMLInputElement>(null)
   const active = settings.skills.filter((skill) => skill.enabled).length
 
-  const loadFile = async (file: File) => {
+  useEffect(() => {
+    const input = folderRef.current
+    if (!input) return
+    input.setAttribute('webkitdirectory', '')
+    input.setAttribute('directory', '')
+    input.setAttribute('multiple', '')
+  }, [])
+
+  const store = (skill: Skill, verb: string) => {
+    const exists = useSettings.getState().skills.some((entry) => entry.id === skill.id)
+    if (exists) updateSkill(skill.id, skill)
+    else addSkill(skill)
+    notify(`${skill.name} ${verb}.`, 'success')
+  }
+
+  const installFolder = async (list: FileList | null) => {
+    if (!list || list.length === 0) return
+    setInstalling('folder')
     try {
-      const text = await readFileAsText(file)
-      const heading = /^#\s+(.+)$/m.exec(text)
-      const name = heading?.[1]?.trim() || file.name.replace(/\.[^.]+$/, '')
-      const body = heading ? text.replace(heading[0], '').trim() : text.trim()
-      const paragraph = body.split(/\n\s*\n/).find((part) => part.trim() && !part.trim().startsWith('#'))
-      setDraft({
-        name,
-        description: (paragraph ?? '').replace(/[#>*`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 180),
-        instructions: text.trim(),
-      })
-      notify(`Loaded ${file.name}. Review it, then save the skill.`, 'info')
+      const skill = await skillFromFolder(Array.from(list))
+      store(skill, 'installed')
     } catch (cause) {
-      notify(cause instanceof Error ? cause.message : 'Could not read that skill.', 'error')
+      notify(cause instanceof Error ? cause.message : 'Could not read that folder.', 'error')
+    } finally {
+      setInstalling('')
     }
   }
 
-  const save = () => {
-    if (!draft) return
-    const name = draft.name.trim()
-    if (!name) {
-      notify('Give the skill a name.', 'error')
-      return
+  const installNpm = async () => {
+    const name = npmName.trim()
+    if (!name) return
+    setInstalling('npm')
+    try {
+      const { skill } = await installSkillFromNpmRequest(name)
+      store(skill, 'installed from npm')
+      setNpmName('')
+    } catch (cause) {
+      notify(cause instanceof Error ? cause.message : 'Could not install that npm package.', 'error')
+    } finally {
+      setInstalling('')
     }
-    if (!draft.instructions.trim()) {
-      notify('Add instructions for the skill.', 'error')
-      return
-    }
-    if (draft.id) {
-      updateSkill(draft.id, {
-        name,
-        description: draft.description.trim(),
-        instructions: draft.instructions.trim(),
-      })
-      notify('Skill updated.', 'success')
-    } else {
-      addSkill({
-        id: newSkillId(),
-        name,
-        description: draft.description.trim() || 'Custom skill',
-        instructions: draft.instructions.trim(),
-        enabled: true,
-      })
-      notify('Skill saved and enabled.', 'success')
-    }
-    setDraft(null)
   }
 
   const remove = async (skill: Skill) => {
     const confirmed = await askConfirm({
       title: 'Delete this skill?',
-      body: `“${skill.name}” will be removed from this computer.`,
+      body: `“${skill.name}” and its files will be removed from this computer.`,
       confirmLabel: 'Delete skill',
       tone: 'danger',
     })
@@ -1054,159 +1039,115 @@ function SkillsTab() {
 
   return (
     <SettingsSection
-      title="Loaded skills"
-      description={`${active} of ${settings.skills.length} enabled. Enabled instructions are appended to the system prompt for every request.`}
+      title="Installed skills"
+      description={`${active} of ${settings.skills.length} enabled. The model sees each skill’s name and description, loads SKILL.md through the skill tool, and can run the scripts inside the skill folder.`}
     >
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="mb-3 grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)]">
         <button
           type="button"
-          onClick={() => setDraft({ name: '', description: '', instructions: '' })}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink px-2.5 text-[10.5px] font-medium text-panel"
+          onClick={() => folderRef.current?.click()}
+          disabled={Boolean(installing)}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-ink px-3 text-[10.5px] font-medium text-panel disabled:opacity-50"
         >
-          <Plus size={12} /> New skill
-        </button>
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-[10.5px] font-medium text-ink hover:bg-raised"
-        >
-          <Upload size={12} /> Load skill file
+          {installing === 'folder' ? <Spinner size={11} /> : <Upload size={12} />}
+          Install folder
         </button>
         <input
-          ref={fileRef}
+          ref={folderRef}
           type="file"
-          accept=".md,.markdown,.txt"
           className="hidden"
           onChange={(event) => {
-            const file = event.target.files?.[0]
-            if (file) void loadFile(file)
+            void installFolder(event.target.files)
             event.target.value = ''
           }}
         />
+        <div className="flex gap-1.5">
+          <input
+            value={npmName}
+            onChange={(event) => setNpmName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void installNpm()
+            }}
+            placeholder="npm package, e.g. @scope/my-skill"
+            spellCheck={false}
+            className={cn(fieldClass, 'font-mono text-[10.5px]')}
+          />
+          <button
+            type="button"
+            onClick={() => void installNpm()}
+            disabled={!npmName.trim() || Boolean(installing)}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-[10.5px] font-medium text-ink hover:bg-raised disabled:opacity-40"
+          >
+            {installing === 'npm' ? <Spinner size={11} /> : <ArrowDownToLine size={12} />}
+            Install
+          </button>
+        </div>
       </div>
+      <p className="mb-3 text-[9.5px] leading-relaxed text-faint">
+        A skill is a folder with a <span className="font-mono">SKILL.md</span> (name, description, instructions) plus any scripts it needs.
+        Folder uploads are read in your browser; npm packages come from the public registry through the local daemon.
+      </p>
 
-      {draft && (
-        <div className="mb-3 rounded-xl border border-accent/30 bg-accent-soft/20 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[11px] font-medium text-ink">{draft.id ? 'Edit skill' : 'Load a skill'}</p>
-            <button type="button" className="icon-button h-6 w-6" onClick={() => setDraft(null)} aria-label="Close editor">
-              <X size={12} />
-            </button>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div>
-              <Label>Name</Label>
-              <input
-                value={draft.name}
-                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                placeholder="API contract reviewer"
-                className={fieldClass}
-                autoFocus
-              />
+      {settings.skills.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-line px-4 py-8 text-center">
+          <Sparkles size={17} className="mx-auto text-faint" />
+          <p className="mt-2 text-[11.5px] font-medium text-ink">No skills installed</p>
+          <p className="mt-1 text-[10px] text-muted">Install a skill folder or an npm package to give the agent new procedures and scripts.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-line">
+          {settings.skills.map((skill, index) => (
+            <div key={skill.id} className={cn('px-3 py-3', index !== 0 && 'border-t border-line')}>
+              <div className="flex items-start gap-2.5">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
+                  <Sparkles size={11} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-[11.5px] font-medium text-ink">{skill.name}</p>
+                    <span className="rounded bg-raised px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wide text-faint">
+                      {skill.source ?? 'folder'}
+                    </span>
+                    {skill.version && <span className="font-mono text-[8.5px] text-faint">v{skill.version}</span>}
+                    <span className={cn('text-[8.5px]', skill.enabled ? 'text-success' : 'text-faint')}>
+                      {skill.enabled ? 'Enabled' : 'Off'}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[9.5px] leading-relaxed text-muted">{skill.description}</p>
+                  <p className="mt-0.5 truncate font-mono text-[8.5px] text-faint" title={skill.package || skill.id}>
+                    {skill.package || skill.id} · {Object.keys(skill.files ?? {}).length} files
+                  </p>
+                  <details className="group/skill mt-1">
+                    <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[9px] font-medium text-faint hover:text-muted [&::-webkit-details-marker]:hidden">
+                      View SKILL.md
+                      <ChevronDown size={9} className="transition-transform group-open/skill:rotate-180" />
+                    </summary>
+                    <pre className="thin-scroll mt-1.5 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-raised/40 p-2 font-mono text-[9.5px] leading-relaxed text-muted">
+                      {skill.instructions}
+                    </pre>
+                  </details>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void remove(skill)}
+                    className="icon-button h-7 w-7 hover:text-danger"
+                    aria-label={`Delete ${skill.name}`}
+                    title="Delete skill"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                  <Switch
+                    checked={skill.enabled}
+                    onChange={(enabled) => updateSkill(skill.id, { enabled })}
+                    label={`Enable ${skill.name}`}
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <Label hint="Shown in the skills list">Description</Label>
-              <input
-                value={draft.description}
-                onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                placeholder="Checks a diff against an API contract"
-                className={fieldClass}
-              />
-            </div>
-          </div>
-          <div className="mt-2">
-            <Label hint="Markdown">Instructions</Label>
-            <textarea
-              value={draft.instructions}
-              onChange={(event) => setDraft({ ...draft, instructions: event.target.value })}
-              placeholder={STARTER_SKILL}
-              rows={8}
-              className="thin-scroll w-full resize-y rounded-lg border border-line bg-panel px-2.5 py-2 font-mono text-[10.5px] leading-relaxed text-ink outline-none focus:border-accent/50"
-            />
-          </div>
-          <div className="mt-2 flex justify-end gap-2">
-            <button type="button" className="chip h-7 text-[10.5px]" onClick={() => setDraft(null)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={save}
-              className="inline-flex h-7 items-center gap-1 rounded-lg bg-accent px-2.5 text-[10.5px] font-medium text-on-accent hover:bg-accent/90"
-            >
-              <Check size={11} /> Save skill
-            </button>
-          </div>
+          ))}
         </div>
       )}
-
-      <div className="overflow-hidden rounded-xl border border-line">
-        {settings.skills.map((skill, index) => (
-          <div key={skill.id} className={cn('px-3 py-3', index !== 0 && 'border-t border-line')}>
-            <div className="flex items-start gap-2.5">
-              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
-                <Sparkles size={11} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <p className="text-[11.5px] font-medium text-ink">{skill.name}</p>
-                  {skill.builtIn && (
-                    <span className="rounded bg-raised px-1.5 py-0.5 text-[8px] font-medium text-faint">Built-in</span>
-                  )}
-                  <span className={cn('text-[8.5px]', skill.enabled ? 'text-success' : 'text-faint')}>
-                    {skill.enabled ? 'Enabled' : 'Off'}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[9.5px] leading-relaxed text-muted">{skill.description}</p>
-                <details className="group/skill mt-1">
-                  <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[9px] font-medium text-faint hover:text-muted [&::-webkit-details-marker]:hidden">
-                    View instructions
-                    <ChevronDown size={9} className="transition-transform group-open/skill:rotate-180" />
-                  </summary>
-                  <pre className="thin-scroll mt-1.5 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-raised/40 p-2 font-mono text-[9.5px] leading-relaxed text-muted">
-                    {skill.instructions}
-                  </pre>
-                </details>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {!skill.builtIn && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setDraft({
-                          id: skill.id,
-                          name: skill.name,
-                          description: skill.description,
-                          instructions: skill.instructions,
-                        })
-                      }
-                      className="icon-button h-7 w-7"
-                      aria-label={`Edit ${skill.name}`}
-                      title="Edit skill"
-                    >
-                      <FilePenLine size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void remove(skill)}
-                      className="icon-button h-7 w-7 hover:text-danger"
-                      aria-label={`Delete ${skill.name}`}
-                      title="Delete skill"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </>
-                )}
-                <Switch
-                  checked={skill.enabled}
-                  onChange={(enabled) => updateSkill(skill.id, { enabled })}
-                  label={`Enable ${skill.name}`}
-                />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
     </SettingsSection>
   )
 }
@@ -2038,14 +1979,17 @@ export function SettingsModal() {
             {TABS.map((item, index) => {
               const Icon = item.icon
               const active = tab === item.id
+              const disabled = item.id === 'plugins'
               return (
                 <button
                   key={item.id}
                   type="button"
+                  disabled={disabled}
                   onClick={() => openSettings(item.id)}
-                  title={item.description}
+                  title={disabled ? 'Plugins are disabled for maintenance' : item.description}
                   className={cn(
                     'group/tab relative mb-[2px] flex h-10 w-full items-center gap-3 rounded-2xl px-3 text-left text-[12.5px] transition-colors duration-200',
+                    disabled && 'cursor-not-allowed opacity-40',
                     active ? 'font-semibold text-ink' : 'text-muted hover:text-ink',
                   )}
                 >
@@ -2054,6 +1998,7 @@ export function SettingsModal() {
                   </span>
                   <Icon size={14} className={cn('transition-transform duration-300 group-hover/tab:scale-110', active ? 'text-accent' : 'text-faint')} />
                   {item.label}
+                  {disabled && <span className="ml-auto text-[8px] text-faint">off</span>}
                 </button>
               )
             })}

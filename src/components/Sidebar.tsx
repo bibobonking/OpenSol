@@ -243,14 +243,13 @@ export function Sidebar() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            setMobileOpen(false)
-            openSettings('plugins')
-          }}
-          className="nav-item"
+          disabled
+          title="Plugins are disabled for maintenance"
+          className="nav-item cursor-not-allowed opacity-45"
         >
           <Package size={15} strokeWidth={1.7} className="shrink-0 text-faint" />
           Plugins
+          <span className="ml-auto rounded bg-raised px-1.5 py-0.5 text-[8.5px] font-medium text-faint">maintenance</span>
         </button>
         <button
           type="button"

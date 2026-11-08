@@ -1,15 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
     <radialGradient id="g" cx="32" cy="30" r="22" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffd25a"/>
+      <stop offset="0" stop-color="#ffe27a"/>
       <stop offset="1" stop-color="#f59e0b"/>
     </radialGradient>
   </defs>
   <rect width="64" height="64" rx="16" fill="#141413"/>
   <rect x=".75" y=".75" width="62.5" height="62.5" rx="15.25" stroke="#fff" stroke-opacity=".08" stroke-width="1.5"/>
-  <circle cx="32" cy="32" r="11" fill="url(#g)"/>
-  <g stroke="#f59e0b" stroke-width="4" stroke-linecap="round">
-    <path d="M32 9v6M32 49v6M9 32h6M49 32h6"/>
-    <path d="M15.7 15.7l4.2 4.2M44.1 44.1l4.2 4.2M15.7 48.3l4.2-4.2M44.1 19.9l4.2-4.2" opacity=".55"/>
+  <circle cx="32" cy="32" r="10.2" fill="url(#g)"/>
+  <circle cx="32" cy="32" r="16.8" stroke="#f59e0b" stroke-opacity=".22" stroke-width="1.8"/>
+  <g stroke="#f59e0b" stroke-width="4.2" stroke-linecap="round">
+    <path d="M32 8.8a23.2 23.2 0 0 1 19.4 11"/>
+    <path d="M55.2 32a23.2 23.2 0 0 1-11 19.4" opacity=".6"/>
+    <path d="M32 55.2a23.2 23.2 0 0 1-19.4-11" opacity=".32"/>
+    <path d="M8.8 32a23.2 23.2 0 0 1 11-19.4" opacity=".8"/>
+  </g>
+  <g stroke="#f59e0b" stroke-width="3.4" stroke-linecap="round">
+    <path d="M32 3v4.4M61 32h-4.4M32 61v-4.4M3 32h4.4" opacity=".9"/>
   </g>
 </svg>

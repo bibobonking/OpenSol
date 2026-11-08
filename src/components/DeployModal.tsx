@@ -9,12 +9,14 @@ import {
   Play,
   Rocket,
   ShieldCheck,
+  Sparkles,
   Square,
   Triangle,
   Terminal,
+  X,
 } from 'lucide-react'
 import type { DeployProviderId, DeployResult } from '../types'
-import { streamDeploy } from '../lib/daemon'
+import { inspectDeploy, streamDeploy, type DeployInspection } from '../lib/daemon'
 import { cn } from '../lib/utils'
 import { useSettings } from '../store/settings'
 import { useUi } from '../store/ui'
@@ -74,9 +76,11 @@ export function DeployModal() {
 
   const [provider, setProvider] = useState<DeployProviderId>('cloudflare')
   const [path, setPath] = useState('')
-  const [outputDir, setOutputDir] = useState('dist')
+  const [outputDir, setOutputDir] = useState('')
   const [buildCommand, setBuildCommand] = useState('')
   const [projectName, setProjectName] = useState('')
+  const [inspection, setInspection] = useState<DeployInspection | null>(null)
+  const [inspecting, setInspecting] = useState(false)
   const [running, setRunning] = useState(false)
   const [logs, setLogs] = useState<LogLine[]>([])
   const [result, setResult] = useState<DeployResult | null>(null)
@@ -89,16 +93,45 @@ export function DeployModal() {
   const meta = PROVIDERS.find((entry) => entry.id === provider) ?? PROVIDERS[0]
   const tool = deployTools?.[provider]
   const configured = Boolean(deploySecrets?.[provider]?.configured)
+  const lastUrl = deploySecrets?.[provider]?.fields?.lastUrl ?? ''
 
   useEffect(() => {
     if (!open) return
     setPath(workspaceRoot)
+    setOutputDir('')
+    setBuildCommand('')
+    setProjectName('')
+    setInspection(null)
     setResult(null)
     setError('')
     setLogs([])
     setRunning(false)
     setCopied(false)
   }, [open, workspaceRoot])
+
+  const detect = async (target = path) => {
+    if (!target.trim()) return
+    setInspecting(true)
+    try {
+      const info = await inspectDeploy(target.trim())
+      setInspection(info)
+      if (info.buildCommand) setBuildCommand((value) => value || info.buildCommand)
+      if (info.outputDir) setOutputDir((value) => value || info.outputDir)
+      if (info.name) setProjectName((value) => value || info.name)
+    } catch (cause) {
+      setInspection(null)
+      setError(cause instanceof Error ? cause.message : 'Could not inspect that folder.')
+    } finally {
+      setInspecting(false)
+    }
+  }
+
+  // Fill the form from the real project once the path settles.
+  useEffect(() => {
+    if (!open || !path.trim()) return
+    const timer = window.setTimeout(() => void detect(path), 450)
+    return () => window.clearTimeout(timer)
+  }, [open, path])
 
   useEffect(() => {
     if (!open) return
@@ -201,7 +234,7 @@ export function DeployModal() {
           </div>
         </div>
         <button type="button" className="icon-button -mr-1 shrink-0" onClick={close} aria-label="Close deploy panel">
-          <span className="text-[18px] leading-none">×</span>
+          <X size={16} />
         </button>
       </div>
 
@@ -221,16 +254,16 @@ export function DeployModal() {
                       onClick={() => setProvider(entry.id)}
                       disabled={running}
                       className={cn(
-                        'flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:opacity-60',
+                        'group/host flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all duration-200 disabled:opacity-60',
                         active
-                          ? 'border-accent/35 bg-accent-soft/45'
-                          : 'border-line bg-panel hover:bg-raised/50',
+                          ? 'border-accent/40 bg-gradient-to-br from-accent-soft/80 to-panel shadow-pill'
+                          : 'border-line bg-panel hover:border-line hover:bg-raised/50',
                       )}
                     >
                       <span
                         className={cn(
-                          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
-                          active ? 'bg-accent text-on-accent' : 'bg-raised text-muted',
+                          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors',
+                          active ? 'bg-accent text-on-accent shadow-pill' : 'bg-raised text-muted group-hover/host:text-ink',
                         )}
                       >
                         <Icon size={13} />
@@ -253,6 +286,18 @@ export function DeployModal() {
                 })}
               </div>
             </div>
+
+            {lastUrl && (
+              <a
+                href={lastUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-line bg-raised/30 px-2.5 py-1.5 text-[9.5px] text-muted hover:text-ink"
+              >
+                <ExternalLink size={10} className="shrink-0 text-faint" />
+                <span className="truncate">Last deploy: {lastUrl}</span>
+              </a>
+            )}
 
             {!configured && (
               <div className="rounded-xl border border-warning/25 bg-warning/[0.045] p-3">
@@ -300,10 +345,27 @@ export function DeployModal() {
                 spellCheck={false}
                 className="h-9 w-full rounded-lg border border-line bg-panel px-2.5 font-mono text-[10.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-accent/50 disabled:opacity-60"
               />
-              <p className="mt-1 text-[9px] leading-relaxed text-faint">
-                {workspaceAvailable ? `Open workspace: ${workspaceName}` : 'No workspace open.'} Another folder must
-                already exist on this machine.
-              </p>
+              <div className="mt-1.5 flex items-center gap-2">
+                <p className="min-w-0 flex-1 truncate text-[9px] leading-relaxed text-faint">
+                  {workspaceAvailable ? `Open workspace: ${workspaceName}` : 'No workspace open.'} Any folder that already exists on this machine.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void detect()}
+                  disabled={running || inspecting || !path.trim()}
+                  className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-line bg-panel px-1.5 text-[9px] font-medium text-muted hover:text-ink disabled:opacity-40"
+                >
+                  {inspecting ? <Spinner size={9} /> : <Sparkles size={9} />}
+                  Detect
+                </button>
+              </div>
+              {inspection && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-line bg-raised/40 px-2 py-1.5 text-[9px] text-muted">
+                  <span className="rounded bg-panel px-1.5 py-0.5 font-medium text-ink">{inspection.framework}</span>
+                  {inspection.existingOutputs.length > 0 && <span>build output: {inspection.existingOutputs.join(', ')}</span>}
+                  {!inspection.hasPackageJson && <span>static folder, no package.json</span>}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2.5">
@@ -316,7 +378,7 @@ export function DeployModal() {
                   value={outputDir}
                   onChange={(event) => setOutputDir(event.target.value)}
                   disabled={running}
-                  placeholder="dist"
+                  placeholder="auto"
                   spellCheck={false}
                   className="h-8 w-full rounded-lg border border-line bg-panel px-2 font-mono text-[10.5px] text-ink outline-none focus:border-accent/50 disabled:opacity-60"
                 />
@@ -338,13 +400,13 @@ export function DeployModal() {
             </div>
 
             <div className="flex flex-wrap gap-1">
-              {['dist', 'build', 'out', '.'].map((value) => (
+              {['auto', 'dist', 'build', 'out', '.'].map((value) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setOutputDir(value)}
                   disabled={running}
-                  className={cn('chip h-7 px-2 text-[9.5px]', outputDir === value && 'chip-active')}
+                  className={cn('chip h-7 px-2 text-[9.5px]', (outputDir || 'auto') === value && 'chip-active')}
                 >
                   {value}
                 </button>
