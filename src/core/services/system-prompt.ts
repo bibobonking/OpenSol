@@ -31,6 +31,7 @@ function workspaceContext(): string {
 
 export class SystemPromptService extends Service {
   static provide = 'systemPrompt'
+  static inject = ['sessions']
   private customSections = new Map<string, (settings: AppSettings, mode: AgentMode) => PromptSection | null>()
 
   constructor(ctx: Context) {
