@@ -7,8 +7,8 @@
     "opensol": "./server/opensol.mjs"
   },
   "scripts": {
-    "dev": "tsonic run",
-    "build": "tsonic build",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
     "artifacts": "node scripts/pull-artifacts.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty",
@@ -34,15 +34,12 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "@tsonic/dotnet": "^10.0.46",
-    "@tsonic/globals": "^10.0.46",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.19",
-    "tsonic": "^0.0.84",
     "typescript": "^5.9.2",
     "vite": "^7.1.3"
   },

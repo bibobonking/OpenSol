@@ -24,6 +24,3 @@ packages/*/*.exe
 
 # Dependencies
 node_modules/
-
-# Internal tooling artifacts (restore scratch, caches)
-.tsonic/
