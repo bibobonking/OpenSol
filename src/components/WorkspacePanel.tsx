@@ -249,6 +249,9 @@ export function WorkspacePanel() {
     return entries.filter((entry) => entry.path.toLowerCase().includes(clean)).slice(0, 300)
   }, [entries, query])
   const lineCount = content ? content.split('\n').length : 0
+  const dirCount = entries.filter((entry) => entry.type === 'dir').length
+  const fileCount = entries.length - dirCount
+  const dirPaths = useMemo(() => entries.filter((entry) => entry.type === 'dir').map((entry) => entry.path), [entries])
 
   useEffect(() => {
     if (editor) editorRef.current?.focus()
@@ -319,40 +322,54 @@ export function WorkspacePanel() {
       const closed = collapsed.has(path)
       return (
         <div key={path}>
-          <button
-            type="button"
-            onClick={() =>
-              setCollapsed((current) => {
-                const next = new Set(current)
-                if (next.has(path)) next.delete(path)
-                else next.add(path)
-                return next
-              })
-            }
-            className="group flex h-7 w-full items-center gap-1.5 rounded-md pr-1.5 text-left text-[11.5px] font-medium text-muted transition-colors hover:bg-raised hover:text-ink"
-            style={{ paddingLeft: 8 + depth * 13 }}
-            title={path}
+          <div
+            className="group/row relative flex h-7 items-center rounded-lg transition-colors hover:bg-raised/80"
+            style={{ paddingLeft: 6 + depth * 14 }}
           >
-            <ChevronRight size={10} className={cn('shrink-0 text-faint transition-transform', !closed && 'rotate-90')} />
-            <FileIcon path={path} type="dir" open={!closed} size={13} />
-            <span className="min-w-0 flex-1 truncate">{node.entry.name}</span>
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(event) => {
-                event.stopPropagation()
-                void removeEntry(path)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void removeEntry(path)
-              }}
-              className="hidden h-5 w-5 items-center justify-center rounded text-faint hover:text-danger group-hover:flex"
+            <button
+              type="button"
+              onClick={() =>
+                setCollapsed((current) => {
+                  const next = new Set(current)
+                  if (next.has(path)) next.delete(path)
+                  else next.add(path)
+                  return next
+                })
+              }
+              className="flex min-w-0 flex-1 items-center gap-1.5 pr-1 text-left text-[11.5px] font-medium text-muted transition-colors hover:text-ink"
+              title={path}
+              aria-expanded={!closed}
+            >
+              <ChevronRight
+                size={10}
+                className={cn('shrink-0 text-faint transition-transform duration-150', !closed && 'rotate-90')}
+              />
+              <FileIcon path={path} type="dir" open={!closed} size={13} />
+              <span className="min-w-0 flex-1 truncate">{node.entry.name}</span>
+              <span className="shrink-0 pr-1 font-mono text-[8.5px] tabular-nums text-faint opacity-0 transition-opacity group-hover/row:opacity-100">
+                {node.children.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void removeEntry(path)}
+              className="mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint opacity-0 transition-all hover:bg-danger/10 hover:text-danger focus-visible:opacity-100 group-hover/row:opacity-100"
               aria-label={`Delete ${path}`}
+              title={`Delete ${path}`}
             >
               <Trash2 size={10} />
-            </span>
-          </button>
-          {!closed && node.children.map((child) => renderNode(child, depth + 1))}
+            </button>
+          </div>
+          {!closed && (
+            <div className="relative">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute bottom-0.5 top-0 w-px bg-line/60"
+                style={{ left: 11 + depth * 14 }}
+              />
+              {node.children.map((child) => renderNode(child, depth + 1))}
+            </div>
+          )}
         </div>
       )
     }
@@ -362,16 +379,21 @@ export function WorkspacePanel() {
         type="button"
         onClick={() => setActiveFile(path)}
         className={cn(
-          'group flex h-7 w-full items-center gap-1.5 rounded-md pr-1.5 text-left font-mono text-[10.5px] transition-colors',
-          activeFile === path ? 'bg-accent-soft font-medium text-accent' : 'text-muted hover:bg-raised hover:text-ink',
+          'group/row relative flex h-7 w-full items-center gap-1.5 rounded-lg pr-1.5 text-left font-mono text-[10.5px] transition-colors',
+          activeFile === path
+            ? 'bg-accent-soft/80 font-medium text-accent'
+            : 'text-muted hover:bg-raised/80 hover:text-ink',
         )}
-        style={{ paddingLeft: 8 + depth * 13 + 10 }}
+        style={{ paddingLeft: 22 + depth * 14 }}
         title={path}
       >
+        {activeFile === path && (
+          <span aria-hidden className="absolute left-0 top-1 bottom-1 w-[2px] rounded-full bg-accent" />
+        )}
         <FileIcon path={path} size={12} className={cn(activeFile === path && 'text-accent')} />
         <span className="min-w-0 flex-1 truncate">{node.entry.name}</span>
         {node.entry.size > 0 && (
-          <span className="shrink-0 text-[8.5px] tabular-nums text-faint/70 opacity-0 transition-opacity group-hover:opacity-100">
+          <span className="shrink-0 font-mono text-[8.5px] tabular-nums text-faint opacity-0 transition-opacity group-hover/row:opacity-100">
             {formatBytes(node.entry.size)}
           </span>
         )}
@@ -517,6 +539,20 @@ export function WorkspacePanel() {
                       aria-label="Find a file"
                     />
                   </div>
+                  <div className="flex items-center justify-between gap-2 px-1 pt-1.5 text-[8.5px] text-faint">
+                    <span className="truncate">
+                      {filtered ? `${filtered.length} matches` : `${fileCount} files · ${dirCount} folders`}
+                    </span>
+                    {!filtered && dirCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setCollapsed(collapsed.size > 0 ? new Set() : new Set(dirPaths))}
+                        className="shrink-0 font-medium hover:text-ink"
+                      >
+                        {collapsed.size > 0 ? 'Expand all' : 'Collapse all'}
+                      </button>
+                    )}
+                  </div>
                   {editor && (
                     <div className="mt-1.5 flex items-center gap-1">
                       <input
@@ -551,24 +587,34 @@ export function WorkspacePanel() {
                       <Spinner size={11} /> Reading folder…
                     </p>
                   )}
-                  {filtered
-                    ? filtered.map((entry) => (
+                  {filtered ? (
+                    <>
+                      {filtered.map((entry) => (
                         <button
                           key={entry.path}
                           type="button"
                           onClick={() => entry.type === 'file' && setActiveFile(entry.path)}
                           className={cn(
-                            'flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left font-mono text-[10.5px]',
+                            'group/row relative flex h-7 w-full items-center gap-1.5 rounded-lg px-2 text-left font-mono text-[10.5px] transition-colors',
                             activeFile === entry.path
-                              ? 'bg-accent-soft font-medium text-accent'
-                              : 'text-muted hover:bg-raised hover:text-ink',
+                              ? 'bg-accent-soft/80 font-medium text-accent'
+                              : 'text-muted hover:bg-raised/80 hover:text-ink',
                           )}
                         >
-                          {entry.type === 'dir' ? <FileIcon path={entry.path} type="dir" size={12} /> : <FileIcon path={entry.path} size={12} />}
+                          {activeFile === entry.path && (
+                            <span aria-hidden className="absolute left-0 top-1 bottom-1 w-[2px] rounded-full bg-accent" />
+                          )}
+                          <FileIcon path={entry.path} type={entry.type === 'dir' ? 'dir' : 'file'} size={12} />
                           <span className="truncate">{entry.path}</span>
                         </button>
-                      ))
-                    : tree.map((node) => renderNode(node, 0))}
+                      ))}
+                      {filtered.length === 0 && (
+                        <p className="px-2 py-4 text-center text-[10.5px] text-faint">No matches in this folder.</p>
+                      )}
+                    </>
+                  ) : (
+                    tree.map((node) => renderNode(node, 0))
+                  )}
                   {!loadingTree && !treeError && entries.length === 0 && (
                     <p className="px-2 py-4 text-center text-[10.5px] text-faint">This folder is empty.</p>
                   )}

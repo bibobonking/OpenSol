@@ -7,14 +7,13 @@ import { useRuntime } from '../../store/ui'
 import { useWorkspace } from '../../store/workspace'
 import { getProviderName } from '../../data/providers'
 import { describeRequestError } from '../../lib/sse'
+import { MAX_PROVIDER_RETRIES, isRetryableProviderError, retryDelayMs } from '../../lib/retry'
 import type { AdapterResult } from '../../agent/adapters/shared'
 import { createTurnQueue, lastUserMessageId } from '../../agent/queue'
 import { resolveToolSetting } from '../mcp-tools'
 import type { StepContext, StepResult, TurnResult } from '../types'
 
-const MAX_RETRIES = 2
-/** Provider hiccups worth another try: overload, rate limits, 5xx and dropped connections. */
-const RETRYABLE = /\b(429|500|502|503|504|529)\b|rate.?limit|overloaded|temporar|timed out|could not be reached|lost the connection|failed to fetch|networkerror/i
+const MAX_RETRIES = MAX_PROVIDER_RETRIES
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -221,23 +220,34 @@ export class AgentLoopService extends Service {
               attempt < MAX_RETRIES &&
               !streamedContent &&
               !streamedReasoning &&
-              RETRYABLE.test(error instanceof Error ? error.message : '')
+              isRetryableProviderError(error instanceof Error ? error.message : '')
             if (retryable) {
               attempt += 1
+              const reason = (error instanceof Error ? error.message : 'provider error').replace(/\s+/g, ' ').slice(0, 240)
               window.dispatchEvent(
                 new CustomEvent('maxcode:notice', {
                   detail: {
-                    message: `${providerName} is busy. Retrying (${attempt}/${MAX_RETRIES})…`,
+                    message: `${providerName}: ${reason} — retrying ${attempt}/${MAX_RETRIES}…`,
                     tone: 'info',
                   },
                 }),
               )
-              await sleep(1200 * attempt * attempt, controller.signal)
+              await sleep(retryDelayMs(attempt), controller.signal)
               if (controller.signal.aborted) continue
               continue
             }
             if (flushTimer !== undefined) window.clearTimeout(flushTimer)
             turnError = stopped ? undefined : describeRequestError(error, providerName)
+            if (turnError) {
+              window.dispatchEvent(
+                new CustomEvent('maxcode:notice', {
+                  detail: {
+                    message: `${providerName} failed after ${attempt + 1} attempt${attempt === 0 ? '' : 's'}: ${turnError}`,
+                    tone: 'error',
+                  },
+                }),
+              )
+            }
             this.ctx.sessions.updateMessage(sessionId, assistantId, {
               content: streamedContent,
               reasoning: streamedReasoning,

@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.1.3
+
+**New**
+- **Skills you install** — skills are no longer just `SKILL.md` files bundled with the app: upload a folder or install an npm package in Settings → Skills, and the agent loads the matching procedure with the new `skill` tool (`list` / `read` / `run`). Skill scripts run through the daemon in a throwaway temp folder and are blocked in Plan mode. Built-in skills were removed.
+- **Credits spent** — provider usage is parsed from the OpenAI-compatible `usage.cost` / `total_cost` fields (OpenRouter is asked to include usage), summed per provider and shown on the home dashboard. Providers that report no cost show `—` instead of a guessed price.
+- **Prompts per session and workspace** — the prompt button in the top bar now edits three levels: the shared prompt, a per-workspace prompt and a per-session prompt. Precedence is session → workspace → shared.
+- **File tree icons** — `FileIcon.tsx` maps extensions and special names to colored Lucide icons (code, config, markdown, images, media, locks, shells) and the workspace tree uses them.
+- **New mark** — a solar-aperture logo carries the app, favicon and desktop shell.
+
+**Changed**
+- **Deploy rebuilt** — the Deploy modal detects framework, package manager, build command and output folder through the new `/api/deploy/inspect` route, picks `dist` / `build` / `out` / `.output/public` / `public` automatically, shows the last deployment and reports failures with useful errors.
+- **No tool-round ceiling** — the agent loop no longer stops after a fixed number of tool rounds; it runs until the model stops or the user stops it.
+- **Model Deck** — hover no longer jitters the provider rail and the active provider only scrolls into view for keyboard navigation.
+- **Plugins are paused** — the Plugins button and Settings tab are disabled for maintenance; the code remains in place.
+
 ## 3.1.2
 
 **New**
