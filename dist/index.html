@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta
+      name="description"
+      content="OpenSol by OpenSoftX is a local-first coding agent. Work in a real folder, run commands, edit files and deploy with your own model keys. Keys stay encrypted on your machine."
+    />
+    <title>OpenSol — Local coding agent by OpenSoftX</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      try {
+        const NAMED = ['light', 'dark', 'night-owl', 'claude-code', 'flame']
+        const DARK = ['dark', 'night-owl', 'claude-code', 'flame']
+        const stored = localStorage.getItem('opensol.theme') || localStorage.getItem('maxcode.theme')
+        const theme = NAMED.includes(stored)
+          ? stored
+          : window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light'
+        const root = document.documentElement
+        root.dataset.theme = theme
+        if (DARK.includes(theme)) root.classList.add('dark')
+      } catch {}
+    </script>
+    <script type="module" crossorigin src="./assets/index-CyxlAgKM.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DFeF90S8.css">
+  </head>
+  <body>
+    <div id="root"><div class="splash" id="boot-splash" aria-hidden="true">
+      <style>
+        .splash{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgb(var(--panel))}
+        .bs{display:flex;flex-direction:column;align-items:center;gap:18px}
+        .bs svg{color:rgb(var(--accent))}
+        .bs-word{font:600 22px/1 Geist,Inter,system-ui,sans-serif;letter-spacing:-.03em;color:rgb(var(--ink))}
+        .bs-bar{width:120px;height:2px;border-radius:2px;background:rgb(var(--line));overflow:hidden;position:relative}
+        .bs-bar::after{content:"";position:absolute;inset:0;width:40%;background:linear-gradient(90deg,transparent,rgb(var(--accent)),transparent);animation:bs-sweep 1.4s cubic-bezier(.65,0,.35,1) infinite}
+        @keyframes bs-sweep{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+      </style>
+      <div class="bs">
+        <svg viewBox="0 0 64 64" width="56" height="56" fill="none"><circle cx="32" cy="32" r="12" fill="currentColor"/><g stroke="currentColor" stroke-width="4.4" stroke-linecap="round"><path d="M32 7v7M32 50v7M7 32h7M50 32h7"/><path d="M14.3 14.3l5 5M44.7 44.7l5 5M14.3 49.7l5-5M44.7 19.3l5-5" opacity=".55"/></g></svg>
+        <div class="bs-word">OpenSol</div>
+        <div class="bs-bar"></div>
+      </div>
+    </div></div>
+  </body>
+</html>

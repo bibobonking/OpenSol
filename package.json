@@ -1,0 +1,46 @@
+{
+  "name": "@bibobonking/opensol",
+  "private": false,
+  "version": "3.2.0",
+  "type": "module",
+  "bin": {
+    "opensol": "./server/opensol.mjs"
+  },
+  "scripts": {
+    "dev": "node server/opensol.mjs start && vite",
+    "build": "tsc -b && vite build",
+    "artifacts": "node scripts/pull-artifacts.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty",
+    "test": "node --test",
+    "start": "node server/opensol.mjs start --open",
+    "daemon": "node server/opensol.mjs start",
+    "daemon:foreground": "node server/daemon.mjs",
+    "daemon:stop": "node server/opensol.mjs stop",
+    "daemon:status": "node server/opensol.mjs status",
+    "daemon:logs": "node server/opensol.mjs logs"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "cordis": "^4.0.0-rc.12",
+    "fflate": "^0.8.2",
+    "highlight.js": "^11.11.1",
+    "lucide-react": "^0.544.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3"
+  }
+}

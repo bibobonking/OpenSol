@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#26211b"/>
+      <stop offset="1" stop-color="#0f0d0b"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="14" y1="12" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb347"/>
+      <stop offset="1" stop-color="#f26b21"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="46" cy="18" r="6" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff2b8"/>
+      <stop offset="1" stop-color="#ffc233"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <rect x=".75" y=".75" width="62.5" height="62.5" rx="14.25" stroke="#fff" stroke-opacity=".09" stroke-width="1.5"/>
+  <path d="M51.32 26.82A20 20 0 1 1 37.18 12.68" stroke="url(#ring)" stroke-width="5.6" stroke-linecap="round"/>
+  <circle cx="46.14" cy="17.86" r="5" fill="url(#sun)"/>
+  <g stroke="#fff4e0" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M25.2 25.6L34 32l-8.8 6.4"/>
+    <path d="M37.6 39.2h6" opacity=".6"/>
+  </g>
+</svg>
