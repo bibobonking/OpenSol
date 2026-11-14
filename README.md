@@ -78,7 +78,7 @@ TypeScript, React 19, Vite, Tailwind CSS, Zustand, direct provider adapters (Ope
 ```
 src/        React app, Cordis kernel (src/core), stores, adapters and UI
 server/     local daemon, encrypted store, workspace tools, shell, MCP and deploy
-desktop/    Tauri wrapper
+desktop/    Electron wrapper
 shared/     plugin package contract used by both sides
 dist/       production build served by the daemon
 ```

@@ -7,3 +7,4 @@ dsh-claude-style/
 *.tsbuildinfo
 out
 scripts
+desktop/release

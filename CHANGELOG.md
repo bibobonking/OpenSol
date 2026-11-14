@@ -16,6 +16,9 @@
 - Agent tool `ask_question` (also in Plan mode): several questions per call, single or multi-select, a small comment under every option, a "Recommended" convention, and a free-text field at the end of **every** question without the model asking for it. Tabs, Back/Next, number keys, Skip; answers go back to the model as text and the card keeps a summary. Turn it off in Settings → Tools.
 
 **Other**
+- **Desktop is now Electron.** The Tauri/Rust wrapper was replaced by Electron and
+  electron-builder for Linux, Windows and macOS. The app still starts (or reuses) the same
+  local daemon, now on Electron's built-in Node runtime, and keeps the same data folder.
 - Version 3.2.3 everywhere (package, daemon, desktop, MCP client info).
 
 ## Realeased 3.2.0 - Final Version

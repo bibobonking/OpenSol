@@ -1,0 +1,56 @@
+appId: dev.opensoft.opensol
+productName: OpenSol
+copyright: Copyright © 2026 OpenSoftX
+asar: true
+npmRebuild: false
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - electron/**/*
+  - loading/**/*
+  - build/icon.png
+
+extraResources:
+  - from: ../dist
+    to: app/dist
+  - from: ../server
+    to: app/server
+  - from: ../shared
+    to: app/shared
+  - from: ../node_modules/fflate
+    to: app/node_modules/fflate
+  - from: ../package.json
+    to: app/package.json
+
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  category: Development
+  synopsis: OpenSol coding agent
+  description: OpenSol Desktop runs the OpenSol local daemon and shows the app in an Electron window.
+  maintainer: OpenSoftX <bibobonking@gmail.com>
+  syncDesktopName: true
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  identity: null
+  hardenedRuntime: false

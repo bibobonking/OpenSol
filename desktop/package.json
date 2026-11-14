@@ -1,0 +1,24 @@
+{
+  "name": "opensol-desktop",
+  "version": "3.2.3",
+  "private": true,
+  "type": "module",
+  "description": "OpenSol Desktop — the OpenSol coding agent in an Electron window.",
+  "author": "OpenSoftX <bibobonking@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/bibobonking/OpenSol",
+  "desktopName": "opensol.desktop",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  }
+}
