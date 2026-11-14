@@ -76,9 +76,12 @@ function StatusDot({ status }: { status: McpServer['status'] }) {
 }
 
 function statusText(server: McpServer) {
+  if (server.reconnecting && server.status !== 'connected') return 'Reconnecting automatically…'
   switch (server.status) {
-    case 'connected':
-      return `${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}${server.serverInfo?.name ? ` · ${server.serverInfo.name} ${server.serverInfo.version ?? ''}` : ''}`
+    case 'connected': {
+      const fellBack = server.activeTransport && server.activeTransport !== server.transport && server.transport !== 'stdio'
+      return `${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}${server.serverInfo?.name ? ` · ${server.serverInfo.name} ${server.serverInfo.version ?? ''}` : ''}${fellBack ? ` · auto: ${server.activeTransport === 'sse' ? 'HTTP+SSE' : 'Streamable HTTP'}` : ''}`
+    }
     case 'connecting':
       return 'Connecting…'
     case 'needs_auth':

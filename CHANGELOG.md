@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.2.3
+
+**MCP: tools that follow the server**
+- **Auto sync, event-driven.** A server that opens tools after an action (10 tools before a project exists, 100 after) is picked up the moment it happens. The daemon listens for `notifications/tools/list_changed` (stdio, legacy SSE, the POST stream *and* the optional Streamable HTTP GET stream), coalesces bursts, re-reads the list and publishes it only when a hash of names, descriptions and schemas really changed. Servers that never send the notification are re-listed once right after a tool call that may change state. Nothing polls on a timer.
+- **The agent keeps going.** The new tool list is applied before the tool result is handed back, the result carries a short note naming the new tools, and the next model request already includes them: no stop, no new message. A call to a tool the list no longer knows re-reads the list once before it is refused.
+- **Live push to the app.** `GET /api/mcp/events` streams every status/tool change to the UI (the 1.2 s "connecting" poll is gone). MCP servers are now loaded at startup, not only after the **+** menu is opened.
+- **Auto-reconnect.** A server that exits or drops is reconnected with back-off (0.4 s → 30 s); its last known tools stay callable meanwhile and a call made during the gap waits for the reconnect instead of failing. A lost Streamable HTTP session (404) is re-opened transparently.
+- **Compatibility.** Protocol negotiation steps down 2025-06-18 → 2025-03-26 → 2024-11-05 and uses what the server answers; a Streamable HTTP URL that only speaks legacy HTTP+SSE (and the other way round) is detected and used automatically, so existing configs keep working; JSON batch replies, SSE notifications inside POST replies, servers without the tools capability, and `roots/list` are handled.
+
+**Approvals**
+- **Allow / Deny act at once.** The card flips to "running" / "denied" on the click instead of waiting for the tool to finish, and a double click is ignored.
+
+**New: Ask Question**
+- Agent tool `ask_question` (also in Plan mode): several questions per call, single or multi-select, a small comment under every option, a "Recommended" convention, and a free-text field at the end of **every** question without the model asking for it. Tabs, Back/Next, number keys, Skip; answers go back to the model as text and the card keeps a summary. Turn it off in Settings → Tools.
+
+**Other**
+- Version 3.2.3 everywhere (package, daemon, desktop, MCP client info).
+
 ## Realeased 3.2.0 - Final Version
 
 - **Shell on every OS.** Commands run in bash (Linux), a login zsh/bash (macOS) or PowerShell/cmd (Windows) instead of a hard-coded `/bin/bash`; the agent is told which. `OPENSOL_SHELL` overrides. Plan mode has a read-only allowlist per shell family, process trees are killed correctly on Windows, and deploy builds use the same shell.

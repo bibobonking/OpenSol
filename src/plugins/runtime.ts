@@ -29,6 +29,24 @@ export function themeCss(themeId: string, palette: Record<string, string>): stri
   return entries.length === 0 ? '' : `[data-theme='${themeId}']{${entries.join(';')}}`
 }
 
+/**
+ * Every service a free (apiVersion 2) plugin may reach from its child context.
+ * Cordis only exposes injected services to a child fiber; without this list any
+ * `ctx.sessions` / `ctx.tools` access throws "cannot get property ... without inject".
+ */
+const PLUGIN_SERVICES = [
+  'sessions',
+  'systemPrompt',
+  'tools',
+  'approval',
+  'llm',
+  'compaction',
+  'subagents',
+  'ui',
+  'agentLoop',
+  'titles',
+]
+
 export function styleElement(id: string): HTMLStyleElement | null {
   return document.getElementById(STYLE_ID(id)) as HTMLStyleElement | null
 }
@@ -154,7 +172,7 @@ export function createPluginRuntime(): PluginRuntime {
           }
         }
 
-        const fiber = kernel.plugin(pluginFn)
+        const fiber = kernel.plugin({ inject: PLUGIN_SERVICES, apply: pluginFn })
         fibers.set(plugin.id, fiber)
 
         try {

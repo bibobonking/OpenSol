@@ -2,6 +2,8 @@
 // The daemon owns every connection: the browser only sees tool metadata and results.
 import { spawn } from 'node:child_process'
 import os from 'node:os'
+import { basename } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { HttpError } from './http.mjs'
 import {
   AuthRequiredError,
@@ -15,8 +17,28 @@ import {
   tokenIsFresh,
 } from './mcp-oauth.mjs'
 
-const PROTOCOL_VERSION = '2025-03-26'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+
+// Newest first. The client offers the first one and steps down when a server refuses it; whatever the
+// server answers with is then used for the MCP-Protocol-Version header (older servers stay compatible).
+const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
+const PROTOCOL_VERSION = PROTOCOL_VERSIONS[0]
 const CONNECT_TIMEOUT_MS = 60_000
+const RECONNECT_DELAYS_MS = [400, 1000, 2500, 5000, 10_000, 20_000, 30_000]
+/** How long a tool call waits for a reconnect that is already under way. */
+const RECONNECT_WAIT_MS = 20_000
+/** Debounce for list_changed bursts: servers often fire several notifications in a row. */
+const REFRESH_DEBOUNCE_MS = 30
+
+const CLIENT_VERSION = (() => {
+  try {
+    const raw = readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
+    return String(JSON.parse(raw).version || '3.2.3')
+  } catch {
+    return '3.2.3'
+  }
+})()
 const REQUEST_TIMEOUT_MS = 120_000
 const MAX_RESULT_CHARS = 200_000
 const MASK = '••••••••'
@@ -38,11 +60,30 @@ class RpcError extends Error {
   }
 }
 
+class HttpStatusError extends Error {
+  constructor(status, text) {
+    super(`MCP server answered ${status}${text ? `: ${String(text).slice(0, 200)}` : ''}`)
+    this.status = status
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Reply to a request the server sent us: ping and roots/list are answered, the rest politely refused. */
+function serverRequestReply(message, roots) {
+  if (message.method === 'ping') return { jsonrpc: '2.0', id: message.id, result: {} }
+  if (message.method === 'roots/list' && typeof roots === 'function') {
+    return { jsonrpc: '2.0', id: message.id, result: { roots: roots() } }
+  }
+  return { jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not supported by OpenSol.' } }
+}
+
 /** Newline-delimited JSON-RPC over a child process. */
 class StdioTransport {
-  constructor(config, { onNotification, cwd }) {
+  constructor(config, { onNotification, cwd, roots }) {
     this.config = config
     this.onNotification = onNotification
+    this.roots = roots
     this.cwd = cwd
     this.pending = new Map()
     this.buffer = ''
@@ -69,7 +110,11 @@ class StdioTransport {
     this.child.stdin.on('error', () => undefined)
     await new Promise((resolve, reject) => {
       this.child.once('spawn', resolve)
-      this.child.once('error', (error) => reject(new Error(`Could not start "${this.config.command}": ${error.message}`)))
+      this.child.once('error', (error) => {
+        const failure = new Error(`Could not start "${this.config.command}": ${error.message}`)
+        failure.permanent = true
+        reject(failure)
+      })
     })
     this.child.on('exit', (code) => {
       this.closed = true
@@ -108,12 +153,11 @@ class StdioTransport {
       return
     }
     if (message?.method && message.id !== undefined) {
-      // Server-initiated requests: answer pings, refuse everything else politely.
-      const reply =
-        message.method === 'ping'
-          ? { jsonrpc: '2.0', id: message.id, result: {} }
-          : { jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not supported by OpenSol.' } }
-      this.#write(reply)
+      try {
+        this.#write(serverRequestReply(message, this.roots))
+      } catch {
+        // The process is already gone.
+      }
       return
     }
     if (message?.method) this.onNotification?.(message.method, message.params)
@@ -168,7 +212,7 @@ class StdioTransport {
   }
 }
 
-async function readSse(response, wantedId) {
+async function readSse(response, wantedId, onMessage) {
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -197,6 +241,8 @@ async function readSse(response, wantedId) {
         if (message.error) throw new RpcError(message.error)
         return message.result
       }
+      // Anything else on this stream (progress, list_changed, server requests) is not ours to drop.
+      onMessage?.(message)
     }
   }
   throw new Error('The MCP server closed the stream without answering.')
@@ -267,28 +313,56 @@ async function authedFetch(url, build, auth) {
   }
 }
 
-/** Streamable HTTP transport: one POST per message, JSON or SSE replies. */
+/** Streamable HTTP transport: one POST per message, JSON or SSE replies, optional standalone GET stream. */
 class HttpTransport {
-  constructor(config, { auth } = {}) {
+  constructor(config, { auth, onNotification, roots } = {}) {
     this.config = config
     this.auth = auth
+    this.onNotification = onNotification
+    this.roots = roots
     this.sessionId = ''
+    this.protocolVersion = ''
+    this.closed = false
+    this.listening = false
+    this.listenController = null
   }
 
   async start() {
     checkRemoteUrl(this.config.url)
   }
 
-  #headers() {
+  #headers({ stream = false } = {}) {
     return remoteHeaders(this.config, this.auth, {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      'MCP-Protocol-Version': PROTOCOL_VERSION,
+      ...(stream ? { Accept: 'text/event-stream' } : { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }),
+      ...(this.protocolVersion ? { 'MCP-Protocol-Version': this.protocolVersion } : {}),
       ...(this.sessionId ? { 'Mcp-Session-Id': this.sessionId } : {}),
     })
   }
 
-  async request(method, params, timeoutMs = REQUEST_TIMEOUT_MS) {
+  /** Notifications and requests the server pushes on any stream of this session. */
+  #incoming(message) {
+    if (message?.method && message.id !== undefined) {
+      void this.#post(serverRequestReply(message, this.roots)).catch(() => undefined)
+    } else if (message?.method) {
+      this.onNotification?.(message.method, message.params)
+    }
+  }
+
+  async #post(message) {
+    const response = await authedFetch(
+      this.config.url,
+      async () => ({
+        method: 'POST',
+        headers: await this.#headers(),
+        body: JSON.stringify(message),
+        signal: AbortSignal.timeout(15_000),
+      }),
+      this.auth,
+    )
+    await response.body?.cancel().catch(() => undefined)
+  }
+
+  async request(method, params, timeoutMs = REQUEST_TIMEOUT_MS, retried = false) {
     const id = ++requestCounter
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -305,17 +379,40 @@ class HttpTransport {
       )
       const session = response.headers.get('mcp-session-id')
       if (session) this.sessionId = session
+      // The server forgot our session (restart, expiry): open a new one and repeat the request once.
+      if (response.status === 404 && this.sessionId && method !== 'initialize' && !retried && this.reinit) {
+        await response.body?.cancel().catch(() => undefined)
+        clearTimeout(timer)
+        await this.reinit()
+        return this.request(method, params, timeoutMs, true)
+      }
       if (!response.ok) {
         const text = await response.text().catch(() => '')
-        throw new Error(`MCP server answered ${response.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
+        throw new HttpStatusError(response.status, text)
       }
       const type = response.headers.get('content-type') ?? ''
-      if (type.includes('text/event-stream')) return await readSse(response, id)
-      const message = await response.json()
-      if (message.error) throw new RpcError(message.error)
-      return message.result
+      if (type.includes('text/event-stream')) return await readSse(response, id, (message) => this.#incoming(message))
+      const raw = await response.text()
+      if (!raw.trim()) throw new Error('The MCP server answered with an empty body.')
+      let parsed
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        throw new Error(`The MCP server answered with something that is not JSON (${type || 'no content type'}).`)
+      }
+      // Batch replies: pick our answer, hand the rest to the notification path.
+      const messages = Array.isArray(parsed) ? parsed : [parsed]
+      let answer
+      for (const message of messages) {
+        if (message?.id === id && (message.result !== undefined || message.error)) answer = message
+        else this.#incoming(message)
+      }
+      if (!answer) throw new Error('The MCP server did not answer the request.')
+      if (answer.error) throw new RpcError(answer.error)
+      return answer.result
     } catch (error) {
       if (controller.signal.aborted) throw new Error(`${method} timed out after ${Math.round(timeoutMs / 1000)}s.`)
+      if (isConnectionLost(error) && !(error instanceof RpcError) && !(error instanceof HttpStatusError)) this.onLost?.(error)
       throw error
     } finally {
       clearTimeout(timer)
@@ -323,20 +420,64 @@ class HttpTransport {
   }
 
   async notify(method, params) {
-    const response = await authedFetch(
-      this.config.url,
-      async () => ({
-        method: 'POST',
-        headers: await this.#headers(),
-        body: JSON.stringify({ jsonrpc: '2.0', method, params }),
-        signal: AbortSignal.timeout(15_000),
-      }),
-      this.auth,
-    )
-    await response.body?.cancel().catch(() => undefined)
+    await this.#post({ jsonrpc: '2.0', method, params })
+  }
+
+  /**
+   * Optional GET stream (spec 2025-03-26+): servers push list_changed here between requests.
+   * Servers without it answer 405/404, which ends the attempt quietly for good.
+   */
+  startListening() {
+    if (this.closed || this.listening) return
+    this.listening = true
+    void this.#listen().finally(() => {
+      this.listening = false
+    })
+  }
+
+  async #listen() {
+    let failures = 0
+    while (!this.closed) {
+      const controller = new AbortController()
+      this.listenController = controller
+      const started = Date.now()
+      try {
+        const response = await authedFetch(
+          this.config.url,
+          async () => ({ method: 'GET', headers: await this.#headers({ stream: true }), signal: controller.signal }),
+          this.auth,
+        )
+        const type = response.headers.get('content-type') ?? ''
+        if (!response.ok || !response.body || !type.includes('text/event-stream')) {
+          await response.body?.cancel().catch(() => undefined)
+          if ([400, 404, 405, 406, 501].includes(response.status) || response.ok) return
+          if (++failures > 3) return
+          await sleep(1500 * failures)
+          continue
+        }
+        for await (const { data } of sseEvents(response, controller.signal)) {
+          let message
+          try {
+            message = JSON.parse(data)
+          } catch {
+            continue
+          }
+          this.#incoming(message)
+        }
+        failures = Date.now() - started < 2000 ? failures + 1 : 0
+        if (failures > 5) return
+        await sleep(400)
+      } catch (error) {
+        if (this.closed || error instanceof AuthRequiredError) return
+        if (++failures > 5) return
+        await sleep(Math.min(1000 * failures * failures, 15_000))
+      }
+    }
   }
 
   async close() {
+    this.closed = true
+    this.listenController?.abort()
     if (!this.sessionId) return
     await fetch(this.config.url, {
       method: 'DELETE',
@@ -351,10 +492,11 @@ class HttpTransport {
  * server message; the first `endpoint` event names the URL that requests are POSTed to.
  */
 class SseTransport {
-  constructor(config, { auth, onNotification } = {}) {
+  constructor(config, { auth, onNotification, roots } = {}) {
     this.config = config
     this.auth = auth
     this.onNotification = onNotification
+    this.roots = roots
     this.pending = new Map()
     this.closed = false
     this.controller = new AbortController()
@@ -373,7 +515,12 @@ class SseTransport {
     )
     if (!response.ok || !response.body) {
       const text = await response.text().catch(() => '')
-      throw new Error(`MCP server answered ${response.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
+      throw new HttpStatusError(response.status, text)
+    }
+    // A JSON answer to the GET means this URL is a Streamable HTTP endpoint, not a legacy SSE one.
+    if (!(response.headers.get('content-type') ?? '').includes('text/event-stream')) {
+      await response.body.cancel().catch(() => undefined)
+      throw new HttpStatusError(406, 'the URL did not open an event stream')
     }
     const endpoint = new Promise((resolve, reject) => {
       this.resolveEndpoint = resolve
@@ -423,11 +570,7 @@ class SseTransport {
       return
     }
     if (message?.method && message.id !== undefined) {
-      const reply =
-        message.method === 'ping'
-          ? { jsonrpc: '2.0', id: message.id, result: {} }
-          : { jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not supported by OpenSol.' } }
-      void this.#post(reply).catch(() => undefined)
+      void this.#post(serverRequestReply(message, this.roots)).catch(() => undefined)
       return
     }
     if (message?.method) this.onNotification?.(message.method, message.params)
@@ -447,7 +590,7 @@ class SseTransport {
     )
     if (!response.ok) {
       const text = await response.text().catch(() => '')
-      throw new Error(`MCP server answered ${response.status}${text ? `: ${text.slice(0, 200)}` : ''}`)
+      throw new HttpStatusError(response.status, text)
     }
     await response.body?.cancel().catch(() => undefined)
   }
@@ -591,6 +734,7 @@ export class McpManager {
     this.getCwd = async () => os.homedir()
     this.pendingAuth = new PendingAuthorizations()
     this.refreshing = new Map()
+    this.listeners = new Set()
     // OAuth client + tokens per server. The daemon swaps in the encrypted secrets file.
     const memory = new Map()
     this.authStore = {
@@ -703,6 +847,7 @@ export class McpManager {
     const config = this.configs.get(id)
     if (config?.enabled && config.oauth?.enabled) {
       this.runtime.set(id, { status: 'needs_auth', error: '', tools: [], authorized: false })
+      this.#emitServer(id)
     }
     return config ? this.view(config) : null
   }
@@ -714,13 +859,39 @@ export class McpManager {
       const config = next.get(id)
       if (!config || JSON.stringify(config) !== JSON.stringify(previous)) stale.push(id)
     }
-    await Promise.all(stale.map((id) => this.disconnect(id)))
+    await Promise.all(stale.map((id) => this.#teardown(id)))
     this.configs = next
     for (const id of [...this.runtime.keys()]) if (!next.has(id)) this.runtime.delete(id)
+    for (const id of stale) {
+      const config = next.get(id)
+      if (config) this.runtime.set(id, { status: config.enabled === false ? 'disabled' : 'disconnected', error: '', tools: [] })
+    }
+    this.#emit({ type: 'servers', servers: this.list() })
   }
 
   list() {
     return [...this.configs.values()].map((config) => this.view(config))
+  }
+
+  /** Live updates for the browser: every change of a server (status, tools, reconnect) is pushed once. */
+  subscribe(listener) {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  #emit(event) {
+    for (const listener of this.listeners) {
+      try {
+        listener(event)
+      } catch {
+        // A dead listener must never break a connection.
+      }
+    }
+  }
+
+  #emitServer(id) {
+    const config = this.configs.get(id)
+    if (config) this.#emit({ type: 'server', server: this.view(config) })
   }
 
   view(config) {
@@ -729,13 +900,17 @@ export class McpManager {
       id: config.id,
       name: config.name,
       transport: config.transport,
+      activeTransport: state.activeTransport ?? config.transport,
+      protocolVersion: state.protocolVersion ?? null,
       enabled: config.enabled,
       approval: config.approval,
       disabledTools: config.disabledTools ?? [],
       status: state.status ?? (config.enabled ? 'disconnected' : 'disabled'),
       error: state.error ?? '',
+      reconnecting: state.reconnecting === true,
       serverInfo: state.serverInfo ?? null,
       connectedAt: state.connectedAt ?? null,
+      toolsHash: state.toolsHash ?? '',
       oauth: config.oauth?.enabled
         ? {
             enabled: true,
@@ -762,80 +937,248 @@ export class McpManager {
     return { ...base, url: config.url, headers: maskRecord(config.headers) }
   }
 
-  async connect(id) {
+  async #teardown(id) {
+    const state = this.runtime.get(id)
+    if (!state) return
+    clearTimeout(state.refreshTimer)
+    clearTimeout(state.reconnectTimer)
+    state.refreshTimer = null
+    state.reconnectTimer = null
+    const transport = state.transport
+    state.transport = null
+    if (transport) await transport.close().catch(() => undefined)
+  }
+
+  /**
+   * Connects (or reconnects). `auto` marks a background reconnect: the last known tools stay
+   * visible and callable while it runs, so the agent never has to stop for a blip.
+   */
+  async connect(id, { auto = false, attempts = 0 } = {}) {
     const config = this.configs.get(id)
     if (!config) throw new HttpError(404, 'Unknown MCP server.', 'mcp_missing')
-    await this.disconnect(id)
-    const state = { status: 'connecting', error: '', tools: [] }
+    const previous = this.runtime.get(id)
+    const keep = auto ? previous?.tools ?? [] : []
+    await this.#teardown(id)
+    const state = {
+      status: 'connecting',
+      error: '',
+      tools: keep,
+      auto,
+      attempts: auto ? attempts : 0,
+      reconnecting: auto,
+      wasConnected: auto ? previous?.wasConnected === true : false,
+      toolsHash: auto ? previous?.toolsHash ?? '' : '',
+    }
     this.runtime.set(id, state)
-    try {
-      const onNotification = (method) => {
-        if (method === 'notifications/tools/list_changed') void this.refresh(id).catch(() => undefined)
-      }
-      const auth = config.transport === 'stdio' ? null : this.#authHooks(config)
-      const transport =
-        config.transport === 'http'
-          ? new HttpTransport(config, { auth })
-          : config.transport === 'sse'
-            ? new SseTransport(config, { auth, onNotification })
-            : new StdioTransport(config, { cwd: await this.getCwd(), onNotification })
-      state.transport = transport
-      state.authorized = Boolean(auth && (await this.authStore.get(id))?.tokens)
-      await transport.start()
-      if (config.transport !== 'http') {
-        transport.onExit = (error) => {
-          if (this.runtime.get(id) === state && state.status === 'connected') {
-            state.status = 'error'
-            state.error = error.message
-          }
+    this.#emitServer(id)
+    state.connectPromise = this.#establish(id, config, state).finally(() => {
+      state.connectPromise = null
+    })
+    await state.connectPromise
+    return this.view(config)
+  }
+
+  async #establish(id, config, state) {
+    const kinds = config.transport === 'stdio' ? ['stdio'] : config.transport === 'sse' ? ['sse', 'http'] : ['http', 'sse']
+    let failure = null
+    for (const [index, kind] of kinds.entries()) {
+      try {
+        await this.#open(id, config, state, kind)
+        failure = null
+        if (index > 0) state.note = `Connected over ${kind === 'sse' ? 'legacy HTTP+SSE' : 'Streamable HTTP'} (auto-detected).`
+        break
+      } catch (error) {
+        if (error instanceof SupersededError) {
+          await state.transport?.close().catch(() => undefined)
+          return
         }
+        if (failure === null || index === 0) failure = error
+        else if (error instanceof AuthRequiredError) failure = error
+        await state.transport?.close().catch(() => undefined)
+        state.transport = null
+        // Only a protocol mismatch justifies trying the other remote transport.
+        if (kind === 'stdio' || !isTransportMismatch(error)) break
       }
-      const init = await withTimeout(
-        transport.request('initialize', {
-          protocolVersion: PROTOCOL_VERSION,
-          capabilities: {},
-          clientInfo: { name: 'OpenSol', version: '3.1.0' },
-        }),
-        CONNECT_TIMEOUT_MS,
-        'initialize',
-      )
-      await transport.notify('notifications/initialized')
-      state.serverInfo = init?.serverInfo ?? null
-      state.tools = await this.#listTools(transport)
-      state.status = 'connected'
-      state.connectedAt = Date.now()
-      state.authorized = Boolean(auth && (await this.authStore.get(id))?.tokens)
-    } catch (error) {
-      if (error instanceof AuthRequiredError) {
-        state.authorized = false
-        if (config.oauth?.enabled) {
-          state.status = 'needs_auth'
-          state.error = ''
-          state.wwwAuthenticate = error.wwwAuthenticate
-        } else {
-          state.status = 'error'
-          state.error = 'The server answered 401 (sign-in required). Add credentials under Headers, or turn on OAuth.'
-        }
+    }
+    if (this.runtime.get(id) !== state) return
+    if (!failure) {
+      this.#emitServer(id)
+      return
+    }
+    state.connectedAt = null
+    if (failure instanceof AuthRequiredError) {
+      state.authorized = false
+      state.tools = []
+      state.reconnecting = false
+      if (config.oauth?.enabled) {
+        state.status = 'needs_auth'
+        state.error = ''
+        state.wwwAuthenticate = failure.wwwAuthenticate
       } else {
         state.status = 'error'
-        state.error = error instanceof Error ? error.message : 'Could not connect.'
+        state.error = 'The server answered 401 (sign-in required). Add credentials under Headers, or turn on OAuth.'
       }
-      await state.transport?.close().catch(() => undefined)
-      state.transport = null
+      this.#emitServer(id)
+      return
     }
-    return this.view(config)
+    state.status = 'error'
+    state.error = failure instanceof Error ? failure.message : 'Could not connect.'
+    // A server that worked before is worth retrying; one that never started (bad command, bad URL) is not.
+    if (state.wasConnected && !failure.permanent) {
+      this.#scheduleReconnect(id)
+      return
+    }
+    state.tools = []
+    state.reconnecting = false
+    this.#emitServer(id)
+  }
+
+  async #open(id, config, state, kind) {
+    const onNotification = (method) => {
+      if (method === 'notifications/tools/list_changed') this.scheduleRefresh(id)
+    }
+    const cwd = await this.getCwd()
+    const roots = () => [{ uri: pathToFileURL(cwd).href, name: basename(cwd) || 'workspace' }]
+    const auth = kind === 'stdio' ? null : this.#authHooks(config)
+    const transport =
+      kind === 'http'
+        ? new HttpTransport(config, { auth, onNotification, roots })
+        : kind === 'sse'
+          ? new SseTransport(config, { auth, onNotification, roots })
+          : new StdioTransport(config, { cwd, onNotification, roots })
+    state.transport = transport
+    state.activeTransport = kind
+    state.authorized = Boolean(auth && (await this.authStore.get(id))?.tokens)
+    await transport.start()
+    if (kind !== 'http') transport.onExit = (error) => this.#onTransportLost(id, state, error)
+    else transport.onLost = (error) => this.#onTransportLost(id, state, error)
+    const init = await this.#handshake(transport)
+    if (kind === 'http') {
+      transport.reinit = async () => {
+        transport.sessionId = ''
+        transport.protocolVersion = ''
+        await this.#handshake(transport)
+      }
+    }
+    const tools = await this.#listTools(transport)
+    if (this.runtime.get(id) !== state) throw new SupersededError()
+    state.serverInfo = init?.serverInfo ?? null
+    state.protocolVersion = transport.protocolVersion || null
+    state.listChanged = init?.capabilities?.tools?.listChanged === true
+    state.tools = tools
+    state.toolsHash = toolsSignature(tools)
+    state.status = 'connected'
+    state.error = ''
+    state.reconnecting = false
+    state.attempts = 0
+    state.wasConnected = true
+    state.connectedAt = Date.now()
+    state.authorized = Boolean(auth && (await this.authStore.get(id))?.tokens)
+    // Streamable HTTP servers may push list_changed over a standalone GET stream.
+    if (kind === 'http') transport.startListening()
+  }
+
+  /** initialize with version negotiation: offer the newest protocol, step down when the server refuses it. */
+  async #handshake(transport) {
+    let lastError
+    for (const [index, version] of PROTOCOL_VERSIONS.entries()) {
+      try {
+        const init = await withTimeout(
+          transport.request('initialize', {
+            protocolVersion: version,
+            capabilities: { roots: { listChanged: false } },
+            clientInfo: { name: 'OpenSol', version: CLIENT_VERSION },
+          }),
+          CONNECT_TIMEOUT_MS,
+          'initialize',
+        )
+        transport.protocolVersion = typeof init?.protocolVersion === 'string' ? init.protocolVersion : version
+        await Promise.resolve()
+          .then(() => transport.notify('notifications/initialized'))
+          .catch(() => undefined)
+        return init
+      } catch (error) {
+        lastError = error
+        const olderLeft = index < PROTOCOL_VERSIONS.length - 1
+        const versionRefusal =
+          (error instanceof RpcError && (error.code === -32602 || /protocol|version|unsupported/i.test(error.message))) ||
+          (error instanceof HttpStatusError && error.status === 400 && /protocol|version|unsupported/i.test(error.message))
+        if (olderLeft && versionRefusal) continue
+        throw error
+      }
+    }
+    throw lastError
   }
 
   async #listTools(transport) {
     const tools = []
     let cursor
-    for (let page = 0; page < 10; page += 1) {
-      const result = await transport.request('tools/list', cursor ? { cursor } : {}, 30_000)
-      if (Array.isArray(result?.tools)) tools.push(...result.tools.filter((tool) => tool && typeof tool.name === 'string'))
-      cursor = result?.nextCursor
-      if (!cursor) break
+    try {
+      for (let page = 0; page < 20; page += 1) {
+        const result = await transport.request('tools/list', cursor ? { cursor } : {}, 30_000)
+        if (Array.isArray(result?.tools)) tools.push(...result.tools.filter((tool) => tool && typeof tool.name === 'string'))
+        cursor = result?.nextCursor
+        if (!cursor) break
+      }
+    } catch (error) {
+      // A server without the tools capability answers "method not found": that is an empty list, not a failure.
+      if (error instanceof RpcError && error.code === -32601) return []
+      throw error
     }
     return tools
+  }
+
+  /** Re-reads the tool list and publishes it only when it really changed (hash compare). */
+  async #syncTools(id, state) {
+    const transport = state.transport
+    if (!transport || state.status !== 'connected') return { changed: false, added: [], removed: [] }
+    const next = await this.#listTools(transport)
+    if (this.runtime.get(id) !== state) return { changed: false, added: [], removed: [] }
+    const hash = toolsSignature(next)
+    if (hash === state.toolsHash) return { changed: false, added: [], removed: [] }
+    const before = new Set(state.tools.map((tool) => tool.name))
+    const after = new Set(next.map((tool) => tool.name))
+    const diff = {
+      changed: true,
+      added: next.filter((tool) => !before.has(tool.name)).map((tool) => tool.name),
+      removed: state.tools.filter((tool) => !after.has(tool.name)).map((tool) => tool.name),
+    }
+    state.tools = next
+    state.toolsHash = hash
+    this.#emitServer(id)
+    return diff
+  }
+
+  /**
+   * Event-driven sync: called when the server says its tools changed. Bursts are coalesced; a request that
+   * arrives while a refresh runs makes it go round once more instead of stacking up.
+   */
+  scheduleRefresh(id, delay = REFRESH_DEBOUNCE_MS) {
+    const state = this.runtime.get(id)
+    if (!state || state.status !== 'connected') return
+    state.refreshDirty = true
+    if (state.refreshTimer || state.refreshing) return
+    state.refreshTimer = setTimeout(() => {
+      state.refreshTimer = null
+      void this.#runRefresh(id, state)
+    }, delay)
+  }
+
+  #runRefresh(id, state) {
+    if (state.refreshing) return state.refreshing
+    state.refreshing = (async () => {
+      try {
+        while (state.refreshDirty) {
+          state.refreshDirty = false
+          await this.#syncTools(id, state)
+        }
+      } catch {
+        // Keep the previous list; the next notification or tool call tries again.
+      } finally {
+        state.refreshing = null
+      }
+    })()
+    return state.refreshing
   }
 
   async refresh(id) {
@@ -843,15 +1186,109 @@ export class McpManager {
     const state = this.runtime.get(id)
     if (!config) throw new HttpError(404, 'Unknown MCP server.', 'mcp_missing')
     if (!state?.transport || state.status !== 'connected') return this.connect(id)
-    state.tools = await this.#listTools(state.transport)
+    try {
+      await this.#syncTools(id, state)
+    } catch (error) {
+      // The connection may have died quietly: rebuild it instead of reporting a stale list.
+      if (!(error instanceof RpcError)) return this.connect(id)
+      throw error
+    }
     return this.view(config)
   }
 
-  async disconnect(id) {
+  /**
+   * After a tool call: make sure the tool list is current before the agent's next step. Servers that
+   * announce list_changed are trusted (their notification usually arrives before the result and is
+   * flushed here); for the others, a call that may change state is followed by one hash-compared re-list.
+   */
+  async #settleTools(id, state, readOnly) {
+    let pending = null
+    if (state.refreshTimer) {
+      clearTimeout(state.refreshTimer)
+      state.refreshTimer = null
+      pending = this.#runRefresh(id, state)
+    } else if (state.refreshing) {
+      pending = state.refreshing
+    } else if (!state.listChanged && !readOnly) {
+      state.refreshDirty = true
+      pending = this.#runRefresh(id, state)
+    }
+    if (pending) {
+      let timer
+      await Promise.race([pending, new Promise((resolve) => (timer = setTimeout(resolve, 3000)))])
+      clearTimeout(timer)
+    }
+  }
+
+  #onTransportLost(id, state, error) {
+    if (this.runtime.get(id) !== state) return
+    if (state.status !== 'connected') return
+    state.status = 'error'
+    state.error = error instanceof Error ? error.message : 'The connection was lost.'
+    state.transport?.close().catch(() => undefined)
+    state.transport = null
+    this.#scheduleReconnect(id)
+  }
+
+  #scheduleReconnect(id) {
     const state = this.runtime.get(id)
-    if (state?.transport) await state.transport.close().catch(() => undefined)
+    const config = this.configs.get(id)
+    if (!state || !config?.enabled || state.reconnectTimer) return
+    const attempt = state.attempts ?? 0
+    if (attempt >= RECONNECT_DELAYS_MS.length) {
+      state.reconnecting = false
+      state.tools = []
+      this.#emitServer(id)
+      return
+    }
+    state.reconnecting = true
+    state.reconnectTimer = setTimeout(() => {
+      state.reconnectTimer = null
+      if (this.runtime.get(id) !== state) return
+      void this.connect(id, { auto: true, attempts: attempt + 1 }).catch(() => undefined)
+    }, RECONNECT_DELAYS_MS[attempt])
+    state.reconnectTimer.unref?.()
+    this.#emitServer(id)
+  }
+
+  /** A connected state to run a call on, waiting for (or starting) a reconnect when the server is down. */
+  async #ready(id, config) {
+    const usable = (state) => state?.status === 'connected' && state.transport && !state.transport.closed
+    let state = this.runtime.get(id)
+    if (usable(state)) return state
+    if (!config.enabled) throw new HttpError(409, `${config.name} is turned off.`, 'mcp_disabled')
+    if (state?.status === 'needs_auth') {
+      throw new HttpError(401, `${config.name} needs you to sign in. Open the MCP panel and press Authorize.`, 'mcp_auth')
+    }
+    if (state?.status === 'connected') {
+      // The transport closed without telling us: treat it as lost and rebuild it right now.
+      this.#onTransportLost(id, state, new Error('The connection closed.'))
+      state = this.runtime.get(id)
+    }
+    let timer
+    const limit = new Promise((resolve) => (timer = setTimeout(resolve, RECONNECT_WAIT_MS)))
+    if (state?.connectPromise) await Promise.race([state.connectPromise, limit])
+    else if (state?.reconnectTimer) {
+      // Someone needs the server now: skip the back-off.
+      clearTimeout(state.reconnectTimer)
+      state.reconnectTimer = null
+      await Promise.race([this.connect(id, { auto: true, attempts: state.attempts ?? 0 }), limit])
+    } else await Promise.race([this.connect(id, { auto: true, attempts: 0 }), limit])
+    clearTimeout(timer)
+    state = this.runtime.get(id)
+    if (usable(state)) return state
+    throw new HttpError(
+      409,
+      `${config.name} is not connected${state?.error ? `: ${state.error}` : ''}. Reconnect it in the MCP panel.`,
+      'mcp_disconnected',
+    )
+  }
+
+  async disconnect(id) {
+    await this.#teardown(id)
     const config = this.configs.get(id)
     this.runtime.set(id, { status: config?.enabled === false ? 'disabled' : 'disconnected', error: '', tools: [] })
+    this.#emitServer(id)
     return config ? this.view(config) : null
   }
 
@@ -863,37 +1300,79 @@ export class McpManager {
 
   async shutdown() {
     await Promise.all([...this.runtime.keys()].map((id) => this.disconnect(id)))
+    this.listeners.clear()
   }
 
   async callTool(id, toolName, args) {
     const config = this.configs.get(id)
-    const state = this.runtime.get(id)
     if (!config) throw new HttpError(404, 'Unknown MCP server.', 'mcp_missing')
-    if (!state?.transport || state.status !== 'connected') {
-      throw new HttpError(409, `${config.name} is not connected. Reconnect it in the MCP panel.`, 'mcp_disconnected')
-    }
     if ((config.disabledTools ?? []).includes(toolName)) {
       throw new HttpError(403, `${toolName} is turned off for ${config.name}.`, 'mcp_tool_disabled')
     }
+    const state = await this.#ready(id, config)
+    const beforeHash = state.toolsHash
+    const beforeNames = new Set(state.tools.map((tool) => tool.name))
+    const known = state.tools.find((tool) => tool.name === toolName)
+    let result
     try {
-      const result = await state.transport.request('tools/call', {
+      result = await state.transport.request('tools/call', {
         name: toolName,
         arguments: args && typeof args === 'object' ? args : {},
       })
-      return { text: flattenContent(result), isError: result?.isError === true }
     } catch (error) {
       if (error instanceof RpcError) return { text: error.message, isError: true }
       if (error instanceof AuthRequiredError) {
         state.status = 'needs_auth'
         state.authorized = false
         state.wwwAuthenticate = error.wwwAuthenticate
+        state.tools = []
         await state.transport?.close().catch(() => undefined)
         state.transport = null
+        this.#emitServer(id)
         throw new HttpError(401, `${config.name} needs you to sign in again. Open the MCP panel and press Authorize.`, 'mcp_auth')
+      }
+      if (isConnectionLost(error)) {
+        this.#onTransportLost(id, state, error)
+        throw new HttpError(
+          502,
+          `${config.name} disconnected during the call and is reconnecting automatically. Run the tool again in a moment.`,
+          'mcp_lost',
+        )
       }
       throw new HttpError(502, error instanceof Error ? error.message : 'The MCP call failed.', 'mcp_failed')
     }
+    await this.#settleTools(id, state, known?.annotations?.readOnlyHint === true).catch(() => undefined)
+    const out = { text: flattenContent(result), isError: result?.isError === true }
+    if (this.runtime.get(id) === state && state.toolsHash !== beforeHash) {
+      const afterNames = new Set(state.tools.map((tool) => tool.name))
+      out.toolsChanged = {
+        added: state.tools.filter((tool) => !beforeNames.has(tool.name)).map((tool) => functionName(id, tool.name)),
+        removed: [...beforeNames].filter((name) => !afterNames.has(name)).map((name) => functionName(id, name)),
+        server: this.view(config),
+      }
+    }
+    return out
   }
+}
+
+class SupersededError extends Error {}
+
+function toolsSignature(tools) {
+  const hash = createHash('sha1')
+  for (const tool of tools) {
+    hash.update(JSON.stringify([tool.name, tool.description ?? '', tool.inputSchema ?? null, tool.annotations?.readOnlyHint === true]))
+  }
+  return hash.digest('hex')
+}
+
+/** 4xx on the first request of a transport usually means "this URL speaks the other protocol". */
+function isTransportMismatch(error) {
+  return error instanceof HttpStatusError && [400, 404, 405, 406, 415].includes(error.status)
+}
+
+function isConnectionLost(error) {
+  const text = error instanceof Error ? `${error.name} ${error.message} ${error.cause?.code ?? ''}` : ''
+  return /not running|exited|not connected|closed|fetch failed|ECONNRESET|ECONNREFUSED|EPIPE|socket|terminated/i.test(text)
 }
 
 export const mcp = new McpManager()

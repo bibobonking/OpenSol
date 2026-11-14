@@ -1,7 +1,7 @@
 {
   "name": "@bibobonking/opensol",
   "private": false,
-  "version": "3.2.0",
+  "version": "3.2.3",
   "type": "module",
   "bin": {
     "opensol": "./server/opensol.mjs"

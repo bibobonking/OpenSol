@@ -35,6 +35,10 @@ export interface ToolResult {
   isError: boolean
   /** Set by file tools so the UI can show +added / −removed lines. */
   diff?: FileDiff
+  /** Structured result for the UI (the answers of ask_question). */
+  data?: unknown
+  /** Set when the call never ran because the person (or Plan mode) said no. */
+  denied?: boolean
 }
 
 export interface ToolExecutionContext {
@@ -56,6 +60,8 @@ export type ToolPreExecuteDecision = 'allow' | 'ask' | 'deny'
 export interface ToolPreExecuteResult {
   decision: ToolPreExecuteDecision
   reason?: string
+  /** The person pressed Deny (as opposed to Plan mode or a disabled tool refusing the call). */
+  userDenied?: boolean
 }
 
 export interface StepContext {

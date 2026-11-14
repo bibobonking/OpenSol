@@ -30,6 +30,12 @@ The daemon is documented as zero-runtime-dependency, but `shared/plugin-package.
 
 `server/lib/mcp.mjs` owns every connection (stdio, Streamable HTTP, legacy SSE). Remote servers may set `oauth: { enabled }`: on a 401 the server becomes `needs_auth`, the MCP panel (`src/components/McpPanel.tsx`) calls `POST /api/mcp/:id/authorize`, and the provider redirects to `/oauth/mcp/callback`. That one route is handled *before* `guardRequest` (the redirect is cross-site); the one-time `state` is its CSRF guard. Clients and tokens live in `secrets.enc` under `mcpOAuth`, never in `state.json`.
 
+**Sync is event-driven, never timed.** `McpManager` emits `{type:'server'|'servers'}` events (`subscribe`) that `GET /api/mcp/events` streams to `src/store/mcp.ts` (started from `applySnapshot`). Tool lists change through `scheduleRefresh` (debounced `list_changed`) or `#settleTools` (after a state-changing call on a server without `listChanged`); both go through `#syncTools`, which compares a hash and emits only on change. `callTool` returns `toolsChanged` and `src/core/mcp-tools.ts` applies it before returning the result — keep that order, it is what lets the next LLM request carry the new tools mid-turn. Lost connections reconnect themselves (`#scheduleReconnect`, keeps last tools, `reconnecting` flag, `#ready` waits for it); `mcpServerUsable` is the client-side gate. Transport kinds fall back to each other (`isTransportMismatch`) and `#handshake` negotiates the protocol version.
+
+## Ask Question
+
+`ask_question` (`src/core/plugins/tools/ask.ts`) parks the loop in `askUser` (`src/store/questions.ts`) until `QuestionCard` answers, skips or the run is stopped. The agent loop marks it `awaiting` (never approval-gated). Arguments are untrusted: always read them through `normalizeQuestions` (`src/lib/ask-question.ts`, unit-tested). The free-text field is rendered by the card for every question — the model must not add an "Other" option.
+
 ## Agent core (Cordis kernel)
 
 `src/core/kernel.ts` builds one Cordis `Context` with services (`sessions`, `systemPrompt`, `tools`, `approval`, `llm`, `compaction`, `subagents`, `ui`, `agentLoop`, `titles`) and first-party tool plugins (`src/core/plugins/tools/*`). `src/agent/index.ts` is a thin facade over `kernel.agentLoop`; `src/agent/adapters/*` are the provider adapters. The model gets its tools from `LlmService` (`request.tools`, default `tools.schemas(settings, mode)`); pass `tools: []` for plain completions.

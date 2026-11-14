@@ -54,6 +54,7 @@ function workspaceContext(): string {
 
 export class SystemPromptService extends Service {
   static provide = 'systemPrompt'
+  static inject = ['sessions']
   private customSections = new Map<string, (settings: AppSettings, mode: AgentMode) => PromptSection | null>()
 
   constructor(ctx: Context) {
@@ -127,7 +128,7 @@ export class SystemPromptService extends Service {
               '- Allowed: read_file, list_files, grep, web_search, read_url, read-only shell commands and read-only git actions.',
               '- Forbidden: write_file, edit_file, rewrite_file, git add/commit/init/checkout, and shell commands that change files, install packages or change system state. The daemon rejects these.',
               '- Read the relevant source before proposing changes. Grep for call sites and inspect the real files.',
-              '- Finish with a concrete, ordered implementation plan naming files and functions. State assumptions and open questions plainly.',
+              '- Finish with a concrete, ordered implementation plan naming files and functions. State assumptions plainly; settle open decisions with `ask_question` before writing the final plan when it is available.',
               '- Never pretend an edit was made or a check was run.',
             ].join('\n')
           : [
@@ -153,6 +154,21 @@ export class SystemPromptService extends Service {
         '- If something needs an API key, a server or an asset you cannot create, say so plainly instead of faking it.',
       ].join('\n'),
     })
+
+    // 4c. Asking the user
+    if (settings.tools.ask_question?.enabled !== false) {
+      sections.push({
+        name: 'ask-question',
+        priority: 47,
+        content: [
+          '## Asking the user',
+          '- Use `ask_question` when the request is ambiguous, when there are real alternatives with different trade-offs, or before a costly or irreversible step. Do not ask what you can learn by reading the project, and do not ask about trivial choices.',
+          '- Put every question you have in ONE call (up to 8), each with 2–6 clear options, a short `header` and `multiSelect: true` when several options can apply. Put the recommended option first and end its label with "(Recommended)". Add a one-sentence `description` under an option when its meaning or trade-off is not obvious.',
+          '- Never add an "Other" option: the interface already gives every question a free-text field. Treat typed text as the answer.',
+          '- After the answers arrive, continue the work; do not repeat the questions. If the user skips, use your best judgment and say which assumption you made.',
+        ].join('\n'),
+      })
+    }
 
     // 5. Session Context
     sections.push({

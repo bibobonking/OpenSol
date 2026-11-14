@@ -12,7 +12,7 @@ const pendingApprovals = new Map<string, PendingApproval>()
 
 export class ApprovalService extends Service {
   static provide = 'approval'
-  static inject = ['tools']
+  static inject = ['tools', 'sessions']
 
   constructor(ctx: Context) {
     super(ctx, 'approval')
@@ -20,12 +20,18 @@ export class ApprovalService extends Service {
     // Attach to tools/pre-execute waterfall gate
     this.ctx.on('tools/pre-execute', async (exec: ToolExecutionContext, next: () => Promise<ToolPreExecuteResult>) => {
       const toolSetting = resolveToolSetting(exec.settings, exec.name)
-      if (toolSetting?.approval === 'ask' && exec.callId) {
+      // ask_question has its own card and never needs a second confirmation.
+      if (toolSetting?.approval === 'ask' && exec.callId && exec.name !== 'ask_question') {
         const approved = await this.waitForApproval(exec.callId, exec.signal)
+        // Flip the card now: the buttons must vanish on the click, not when the tool eventually finishes.
+        if (exec.sessionId) {
+          this.ctx.sessions.setToolStatus(exec.sessionId, exec.callId, approved ? 'running' : exec.signal.aborted ? 'error' : 'denied')
+        }
         if (!approved) {
           return {
             decision: 'deny',
             reason: exec.signal.aborted ? 'Stopped before the tool ran.' : 'You denied this tool call.',
+            userDenied: !exec.signal.aborted,
           }
         }
       }

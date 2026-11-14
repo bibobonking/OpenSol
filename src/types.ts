@@ -102,6 +102,7 @@ export type BuiltinToolName =
   | 'git'
   | 'subagent'
   | 'skill'
+  | 'ask_question'
 
 /** MCP tools are exposed to the model as mcp__<server>__<tool>. */
 export type McpToolName = `mcp__${string}`
@@ -237,6 +238,8 @@ export interface ToolMessage {
   result?: string
   durationMs?: number
   diff?: FileDiff
+  /** Structured output of a tool (answers of ask_question); shown by its own card. */
+  data?: unknown
   createdAt: number
   round: number
 }
@@ -290,6 +293,11 @@ export interface McpServer {
   disabledTools: string[]
   status: McpStatus
   error: string
+  /** True while the daemon is bringing a lost connection back; the last known tools stay callable. */
+  reconnecting?: boolean
+  /** The transport really in use (a http/sse config falls back to the other one on its own). */
+  activeTransport?: McpTransport
+  protocolVersion?: string | null
   serverInfo: { name?: string; version?: string } | null
   connectedAt: number | null
   tools: McpTool[]

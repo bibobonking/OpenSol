@@ -99,6 +99,7 @@ export async function compactSession(sessionId: string): Promise<boolean> {
         history: summaryHistory,
         system: COMPACT_SYSTEM,
         mode: 'build',
+        tools: [],
         signal: new AbortController().signal,
         handlers: {
           ...EMPTY_HANDLERS,

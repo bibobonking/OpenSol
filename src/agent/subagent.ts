@@ -63,6 +63,7 @@ export async function runSubagent(
       history,
       system,
       mode: 'plan',
+      tools: [],
       signal,
       handlers: EMPTY_HANDLERS,
     })

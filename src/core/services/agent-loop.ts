@@ -11,6 +11,7 @@ import { MAX_RETRIES, backoffMs, classifyProviderError } from '../../lib/retry'
 import type { AdapterResult } from '../../agent/adapters/shared'
 import { createTurnQueue, lastUserMessageId } from '../../agent/queue'
 import { resolveToolSetting } from '../mcp-tools'
+import { isMcpToolName, useMcp } from '../../store/mcp'
 import type { StepContext, StepResult, TurnResult } from '../types'
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -272,6 +273,11 @@ export class AgentLoopService extends Service {
         const toolMessages: ToolMessage[] = []
 
         const runToolCall = async (call: ToolCall): Promise<{ message: ToolMessage; stopped: boolean }> => {
+          // A tool the list no longer knows may have been opened by a call a moment ago: re-read once
+          // before refusing, so a fast model never outruns the sync.
+          if (isMcpToolName(call.name) && !useMcp.getState().lookup(call.name)) {
+            await useMcp.getState().load().catch(() => undefined)
+          }
           const toolSetting = resolveToolSetting(settings, call.name)
           if (!toolSetting?.enabled) {
             const message: ToolMessage = {
@@ -292,7 +298,7 @@ export class AgentLoopService extends Service {
             id: toolMessageId,
             role: 'tool',
             call,
-            status: toolSetting.approval === 'ask' ? 'awaiting' : 'running',
+            status: toolSetting.approval === 'ask' || call.name === 'ask_question' ? 'awaiting' : 'running',
             round,
             createdAt: Date.now(),
           }
@@ -319,10 +325,11 @@ export class AgentLoopService extends Service {
             if (progressTimer !== undefined) window.clearTimeout(progressTimer)
             const finalToolMessage: ToolMessage = {
               ...toolMessage,
-              status: output.isError ? 'error' : 'done',
+              status: output.denied ? 'denied' : output.isError ? 'error' : 'done',
               result: output.output,
               durationMs: Date.now() - toolStarted,
               diff: output.diff,
+              data: output.data,
             }
             this.ctx.sessions.updateMessage(sessionId, toolMessageId, finalToolMessage)
             return { message: finalToolMessage, stopped: false }

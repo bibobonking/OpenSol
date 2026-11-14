@@ -305,12 +305,19 @@ export function mcpLogout(id: string): Promise<{ servers: McpServer[] }> {
   return api(`/api/mcp/${encodeURIComponent(id)}/logout`, { method: 'POST', body: '{}' })
 }
 
+/** Sent with a tool result when the call opened (or closed) tools on its server. */
+export interface McpToolsChanged {
+  added: string[]
+  removed: string[]
+  server: McpServer
+}
+
 export function mcpCall(
   server: string,
   tool: string,
   args: Record<string, unknown>,
   signal?: AbortSignal,
-): Promise<{ result: { text: string; isError: boolean } }> {
+): Promise<{ result: { text: string; isError: boolean }; toolsChanged?: McpToolsChanged }> {
   return api('/api/mcp/call', { method: 'POST', body: JSON.stringify({ server, tool, args }), signal })
 }
 

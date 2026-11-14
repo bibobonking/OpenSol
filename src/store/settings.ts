@@ -58,6 +58,7 @@ const DEFAULT_TOOLS: Record<BuiltinToolName, ToolSetting> = {
   git: { enabled: true, approval: 'ask' },
   subagent: { enabled: true, approval: 'ask' },
   skill: { enabled: true, approval: 'auto' },
+  ask_question: { enabled: true, approval: 'auto' },
 }
 
 const DEFAULTS: AppSettings = {

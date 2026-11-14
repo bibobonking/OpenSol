@@ -7,6 +7,7 @@ import { useUi } from '../store/ui'
 import { cn } from '../lib/utils'
 import { diffLines, diffStats } from '../lib/diff'
 import { DiffBadge, DiffView } from './DiffView'
+import { QuestionCard } from './QuestionCard'
 
 const FILE_TOOLS = new Set(['write_file', 'edit_file', 'rewrite_file'])
 
@@ -54,6 +55,8 @@ function approvalCopy(name: ToolName) {
       return 'OpenSol wants to start a read-only subagent to investigate.'
     case 'skill':
       return 'OpenSol wants to load an installed skill.'
+    case 'ask_question':
+      return 'OpenSol wants to ask you a question.'
     case 'web_search':
       return 'OpenSol wants to search the web.'
     case 'read_url':
@@ -64,6 +67,12 @@ function approvalCopy(name: ToolName) {
 }
 
 export function ToolCallCard({ message, compact = false }: { message: ToolMessage; compact?: boolean }) {
+  if (message.call.name === 'ask_question') return <QuestionCard message={message} />
+  return <GenericToolCard message={message} compact={compact} />
+}
+
+function GenericToolCard({ message, compact = false }: { message: ToolMessage; compact?: boolean }) {
+  const [decided, setDecided] = useState<'allow' | 'deny' | null>(null)
   const [open, setOpen] = useState((!compact && message.status === 'awaiting') || message.status === 'error')
   const [copied, setCopied] = useState(false)
   const notify = useUi((state) => state.notify)
@@ -132,26 +141,36 @@ export function ToolCallCard({ message, compact = false }: { message: ToolMessag
         )}
       </button>
 
-      {message.status === 'awaiting' && (
+      {message.status === 'awaiting' && !decided && (
         <div className="animate-fade py-1 pl-[18px]">
           <p className="text-[12px] leading-relaxed text-warning">{approvalCopy(message.call.name)}</p>
           <p className="mt-1 flex items-center gap-4 text-[12px] font-medium">
             <button
               type="button"
-              onClick={() => resolveApproval(message.call.id, true)}
+              onClick={() => {
+                setDecided('allow')
+                resolveApproval(message.call.id, true)
+              }}
               className="text-ink underline decoration-ink/30 underline-offset-[3px] transition-colors hover:decoration-ink"
             >
               Allow once →
             </button>
             <button
               type="button"
-              onClick={() => resolveApproval(message.call.id, false)}
+              onClick={() => {
+                setDecided('deny')
+                resolveApproval(message.call.id, false)
+              }}
               className="text-muted transition-colors hover:text-ink"
             >
               Deny
             </button>
           </p>
         </div>
+      )}
+
+      {message.status === 'awaiting' && decided && (
+        <p className="animate-fade py-1 pl-[18px] text-[12px] text-muted">{decided === 'allow' ? 'Allowed — running…' : 'Denied.'}</p>
       )}
 
       {open && (

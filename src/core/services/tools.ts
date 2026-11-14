@@ -15,6 +15,7 @@ const READ_ONLY_TOOLS = new Set<ToolName>([
   'grep',
   'web_search',
   'read_url',
+  'ask_question',
 ])
 
 export function toolAllowedInMode(name: ToolName, mode: AgentMode): boolean {
@@ -106,7 +107,11 @@ export class ToolService extends Service {
     )
 
     if (preDecision.decision === 'deny') {
-      const deniedResult: ToolResult = { output: preDecision.reason ?? 'Tool call denied.', isError: true }
+      const deniedResult: ToolResult = {
+        output: preDecision.reason ?? 'Tool call denied.',
+        isError: true,
+        ...(preDecision.userDenied ? { denied: true } : {}),
+      }
       this.ctx.events.emit('tools/result', deniedResult, exec)
       return deniedResult
     }

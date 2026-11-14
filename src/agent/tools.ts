@@ -520,6 +520,7 @@ export function toolLabel(name: ToolName): string {
     git: 'Git',
     subagent: 'Subagent',
     skill: 'Skill',
+    ask_question: 'Question',
   }
   return labels[name as BuiltinToolName] ?? 'Tool'
 }

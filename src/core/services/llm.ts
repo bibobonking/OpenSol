@@ -9,6 +9,7 @@ import type { ModelRequest, ToolSchema } from '../types'
 
 export class LlmService extends Service {
   static provide = 'llm'
+  static inject = ['tools']
 
   constructor(ctx: Context) {
     super(ctx, 'llm')

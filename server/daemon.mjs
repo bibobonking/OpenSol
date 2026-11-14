@@ -93,7 +93,7 @@ import { mcp, sanitizeServerConfig } from './lib/mcp.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const DIST = path.resolve(HERE, '..', 'dist')
-const VERSION = '3.2.0'
+const VERSION = '3.2.3'
 const SESSION_COOKIE = 'maxcode_session'
 const CSRF_HEADER = 'x-maxcode-csrf'
 const SESSION_TTL = 14 * 24 * 60 * 60 * 1000
@@ -211,6 +211,7 @@ const TOOL_NAMES = new Set([
   'git',
   'subagent',
   'skill',
+  'ask_question',
 ])
 const SEARCH_PROVIDERS = new Set(['duckduckgo', 'tavily', 'brave', 'serper'])
 
@@ -928,8 +929,34 @@ async function route(req, res) {
 
     if (pathname === '/api/mcp/call' && method === 'POST') {
       const body = await readJson(req, 4 * 1024 * 1024)
-      const result = await mcp.callTool(String(body.server ?? ''), String(body.tool ?? ''), body.args ?? {})
-      json(res, 200, { result })
+      const { toolsChanged, ...result } = await mcp.callTool(String(body.server ?? ''), String(body.tool ?? ''), body.args ?? {})
+      json(res, 200, { result, ...(toolsChanged ? { toolsChanged } : {}) })
+      return
+    }
+
+    // Live MCP updates (status, tool list, reconnects). Pushed when something changes — nothing polls.
+    if (pathname === '/api/mcp/events' && method === 'GET') {
+      streamHeaders(res)
+      res.write('retry: 1500\n\n')
+      const send = (event) => {
+        if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`)
+      }
+      const unsubscribe = mcp.subscribe(send)
+      // Comment lines keep proxies and idle-timeouts from closing a quiet stream; they carry no data.
+      const keepAlive = setInterval(() => {
+        if (!res.writableEnded) res.write(': keep-alive\n\n')
+      }, 25_000)
+      keepAlive.unref?.()
+      const close = () => {
+        clearInterval(keepAlive)
+        unsubscribe()
+      }
+      await new Promise((resolve) => {
+        res.on('close', () => {
+          close()
+          resolve()
+        })
+      })
       return
     }
 
@@ -1049,7 +1076,7 @@ async function route(req, res) {
     if (pathname === '/api/tools/execute' && method === 'POST') {
       const body = await readJson(req, 24 * 1024 * 1024)
       const name = String(body.name ?? '')
-      if (!TOOL_NAMES.has(name) || name === 'subagent' || name === 'skill') {
+      if (!TOOL_NAMES.has(name) || name === 'subagent' || name === 'skill' || name === 'ask_question') {
         throw new HttpError(400, `Unknown tool: ${name}`, 'unknown_tool')
       }
       const result = await executeTool(name, body.args ?? {}, {

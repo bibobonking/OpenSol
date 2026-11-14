@@ -1,5 +1,5 @@
 import { Service, type Context } from 'cordis'
-import type { ChatSession, Message } from '../../types'
+import type { ChatSession, Message, ToolRunStatus } from '../../types'
 import { useChats } from '../../store/chats'
 import { turnHistory as extractTurnHistory } from '../../agent/queue'
 
@@ -30,6 +30,12 @@ export class SessionService extends Service {
   updateMessage(sessionId: string, messageId: string, patch: Partial<Message>): void {
     useChats.getState().updateMessage(sessionId, messageId, patch)
     void this.flush(sessionId)
+  }
+
+  /** Flips a tool card's status the moment something is decided, without waiting for the tool to finish. */
+  setToolStatus(sessionId: string, callId: string, status: ToolRunStatus): void {
+    const message = this.current(sessionId)?.messages.find((item) => item.role === 'tool' && item.call.id === callId)
+    if (message && message.role === 'tool' && message.status !== status) this.updateMessage(sessionId, message.id, { status })
   }
 
   updateSession(sessionId: string, patch: Partial<ChatSession>): void {

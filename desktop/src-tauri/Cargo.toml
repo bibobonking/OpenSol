@@ -1,6 +1,6 @@
 [package]
 name = "opensol-desktop"
-version = "3.1.0"
+version = "3.2.3"
 description = "OpenSol Desktop — the OpenSol coding agent in a native window (system webview)."
 authors = ["OpenSoftX"]
 edition = "2021"

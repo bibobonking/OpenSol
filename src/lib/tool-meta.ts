@@ -1,3 +1,4 @@
+import { normalizeQuestions } from './ask-question'
 import type { BuiltinToolName, ToolName } from '../types'
 
 export function toolLabel(name: ToolName): string {
@@ -15,8 +16,15 @@ export function toolLabel(name: ToolName): string {
     git: 'Git',
     subagent: 'Subagent',
     skill: 'Skill',
+    ask_question: 'Question',
   }
   return labels[name as BuiltinToolName] ?? 'Tool'
+}
+
+function questionSummary(args: Record<string, unknown>): string {
+  const questions = normalizeQuestions(args)
+  if (questions.length === 0) return ''
+  return questions.length === 1 ? questions[0].question : `${questions.length} questions`
 }
 
 export function toolSummary(name: ToolName, args: Record<string, unknown>): string {
@@ -35,6 +43,8 @@ export function toolSummary(name: ToolName, args: Record<string, unknown>): stri
                 ? args.task
                 : name === 'skill'
                   ? [args.name, args.file].filter(Boolean).join(' / ')
+                  : name === 'ask_question'
+                    ? questionSummary(args)
                 : (args.path ?? '')
   return typeof value === 'string' ? value : ''
 }

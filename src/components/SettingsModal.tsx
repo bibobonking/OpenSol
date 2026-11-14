@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  CircleHelp,
   SquareTerminal,
   Sun,
   Terminal,
@@ -650,6 +651,7 @@ const TOOL_ORDER: Array<{ title: string; tools: BuiltinToolName[] }> = [
   },
   { title: 'Web', tools: ['web_search', 'read_url'] },
   { title: 'Delegation', tools: ['subagent', 'skill'] },
+  { title: 'Conversation', tools: ['ask_question'] },
 ]
 
 const TOOL_ICONS: Record<BuiltinToolName, LucideIcon> = {
@@ -665,6 +667,7 @@ const TOOL_ICONS: Record<BuiltinToolName, LucideIcon> = {
   git: GitBranch,
   subagent: Bot,
   skill: Sparkles,
+  ask_question: CircleHelp,
 }
 
 const TOOL_COPY: Record<BuiltinToolName, { label: string; description: string }> = {
@@ -680,6 +683,7 @@ const TOOL_COPY: Record<BuiltinToolName, { label: string; description: string }>
   git: { label: 'Git', description: 'Inspect or change repository state. Plan mode is read-only.' },
   subagent: { label: 'Subagent', description: 'Delegate a read-only investigation and return a concise report.' },
   skill: { label: 'Skill', description: 'Load an installed skill (SKILL.md and its bundled files) when a task matches it.' },
+  ask_question: { label: 'Ask question', description: 'Let the agent ask you multiple-choice questions (with a free-text field) when it needs a decision. Works in Plan mode.' },
 }
 
 function ToolsTab() {
@@ -730,7 +734,7 @@ function ToolsTab() {
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2 pl-9 sm:pl-0">
-                      {config.enabled && (
+                      {config.enabled && tool !== 'ask_question' && (
                         <Segmented<'auto' | 'ask'>
                           value={config.approval}
                           onChange={(approval) => updateTool(tool, { approval })}
@@ -2013,7 +2017,7 @@ export function SettingsModal() {
         <aside className="relative hidden w-[232px] shrink-0 flex-col bg-canvas sm:flex">
           <div className="settings-glow pointer-events-none absolute inset-x-0 top-0 h-48" />
           <div className="relative px-6 pb-4 pt-6">
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-faint">OpenSol · v3.1.0</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-faint">OpenSol · v3.2.3</p>
             <h2 id="settings-title" className="mt-1.5 font-display text-[26px] font-semibold leading-none tracking-[-0.035em] text-ink">
               Settings
             </h2>
